@@ -10,12 +10,9 @@ class Tensor:
     def evaluate(self, context):
         raise NotImplementedError
 
-
-class DifferentiableTensor(Tensor):
-    """Abstract base class for tensors that have defined an Operation to compute the derivative using back-propagation"""
-
     def get_derivative_operation(self):
         raise NotImplementedError
+
 
 
 class Operation(Tensor):
@@ -33,9 +30,11 @@ class Operation(Tensor):
         raise NotImplementedError
 
 
-class DifferentiableOperation(Operation, DifferentiableTensor):
+class DifferentiableOperation(Operation):
     """Abstract base class for operations in a graph that can be used to automatically generate a graph to compute gradients"""
-    pass
+
+    def get_jacobian_operation_of_input_node(self):
+        raise NotImplementedError
 
 
 class ComputeGraph:
@@ -61,3 +60,21 @@ class ComputeGraph:
     def evaluate(self, context=None, required_outputs=None):
         """Evaluates the the graph. required_outputs can be specified as a subset of nodes that are required to be evaluated"""
         raise NotImplementedError
+
+
+class Add2(DifferentiableOperation):
+    """Differentiable operation of adding two tensors"""
+    def __init__(self, in_a, in_b):
+        super().__init__(self)
+        in_a.add_dependent_node(self)
+        in_b.add_dependent_node(self)
+        self.in_a = in_a
+        self.in_b = in_b
+
+    def compute(self, context):
+        a = self.in_a.evaluate(context)
+        b = self.in_a.evaluate(context)
+        return a + b
+
+    def get_derivative_operation(self):
+        
