@@ -83,6 +83,10 @@ class Tensor:
     def print_json(self, context):
         print(json.dumps(self.to_dict(context), indent=2))
 
+    def tag(self, name_tag):
+        self.name_tag = name_tag
+        return self
+
 
 class Operation(Tensor):
     """Abstract base class for operations in a graph that are evaluated using other input Tensors"""

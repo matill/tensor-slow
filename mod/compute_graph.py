@@ -2,8 +2,16 @@
 class ComputeGraph:
     """Class to represent a collection of nodes that create a compute graph"""
 
-    def prune(self, required_outputs):
-        """Creates a new compute graph that only contains the nodes required to compute the nodes in required_outputs"""
+    def get_all_nodes(self, any_node):
+        raise NotImplementedError
+
+    def find_variable_nodes(self):
+        raise NotImplementedError
+
+    def sgd_on_variables(self, step_size, batch_size, cost_func_node):
+        raise NotImplementedError
+
+    def sgd(self, parameter_nodes, step_size, batch_size, cost_func_node):
         raise NotImplementedError
 
     def extend_with_gradients(self, j, gradient_targets):
@@ -18,18 +26,16 @@ class ComputeGraph:
             gradient = node.get_gradient(j)
             gradient_map[node] = gradient
 
-        return self, gradient_map
+        return gradient_map
 
-    def evaluate(self, context=None, required_outputs=None):
+    def evaluate(self, required_outputs, context=None):
         """
-        Evaluates the the graph. required_outputs can be specified as a subset
-        of nodes that are required to be evaluated.
+        Evaluates the the graph.
+        required_outputs must be specified as a subset of nodes that are required to be evaluated.
+        context must be specified if the graph contains Input nodes.
         """
         if context is None:
             context = {}
-
-        if required_outputs is None:
-            required_outputs = self.node_in_graph
 
         for node in required_outputs:
             node.evaluate(context)
