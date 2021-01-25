@@ -16,10 +16,11 @@ import json
 class Tensor:
     """Abstract base class for nodes in a graph that can be evaluated to return a numpy array."""
 
-    def __init__(self):
+    def __init__(self, shape):
         self.direct_dependent_nodes = []
         self.derivative_operations = {}
         self.name_tag = None
+        self.shape = shape
 
     def add_dependent_node(self, node):
         self.direct_dependent_nodes.append(node)
@@ -76,7 +77,8 @@ class Tensor:
     def to_dict(self, context):
         as_dict = {
             "type": str(type(self)),
-            "val": str(self.evaluate(context))
+            "val": str(self.evaluate(context)),
+            "shape": self.shape
         }
 
         if self.name_tag is not None:
@@ -91,13 +93,23 @@ class Tensor:
 class Operation(Tensor):
     """Abstract base class for operations in a graph that are evaluated using other input Tensors"""
 
-    def __init__(self, inputs):
-        super().__init__()
+    def __init__(self, inputs, shape):
+        super().__init__(shape)
         self.inputs = inputs
 
         # Let the input nodes to know that this node depends on them as input
         for node in inputs:
             node.add_dependent_node(self)
+
+    def get_and_assert_common_shape_in_list(self, nodes):
+        common_shape = None
+        for node in nodes:
+            if common_shape == None:
+                common_shape = node.shape
+            elif node.shape is not None:
+                assert node.shape == common_shape, f"Different shapes {node.shape} and {common_shape}"
+
+        return common_shape
 
     def to_dict(self, context):
         as_dict = super().to_dict(context)
@@ -133,7 +145,9 @@ class Add2(BackPropOperation):
     """Differentiable operation of adding two tensors"""
 
     def __init__(self, in_a, in_b):
-        super().__init__([in_a, in_b])
+        inputs = [in_a, in_b]
+        shape = self.get_and_assert_common_shape_in_list(inputs)
+        super().__init__(inputs, shape)
         self.in_a = in_a
         self.in_b = in_b
 
@@ -161,7 +175,9 @@ class Add2(BackPropOperation):
 
 class Subtract(BackPropOperation):
     def __init__(self, in_a, in_b):
-        super().__init__([in_a, in_b])
+        inputs = [in_a, in_b]
+        shape = self.get_and_assert_common_shape_in_list(inputs)
+        super().__init__(inputs, shape)
         self.in_a = in_a
         self.in_b = in_b
 
@@ -187,6 +203,10 @@ class Subtract(BackPropOperation):
 class AddN(BackPropOperation):
     """Differentiable operation of adding a list of tensors"""
 
+    def __init__(self, inputs):
+        shape = self.get_and_assert_common_shape_in_list(inputs)
+        super().__init__(inputs, shape)
+
     def compute(self, context):
         return np.sum(x.evaluate(context) for x in self.inputs)
 
@@ -203,7 +223,7 @@ class AddN(BackPropOperation):
 
 class StaticMutiply(Operation):
     def __init__(self, in_node, constant):
-        super().__init__([in_node])
+        super().__init__(in_node, in_node.shape)
         self.in_node = in_node
         self.constant = constant
 
@@ -213,7 +233,7 @@ class StaticMutiply(Operation):
 
 class SquaredError(BackPropOperation):
     def __init__(self, in_a, in_b):
-        super().__init__([in_a, in_b])
+        super().__init__([in_a, in_b], ())
         self.in_a = in_a
         self.in_b = in_b
 
@@ -257,7 +277,7 @@ class JacobianMultiply(Operation):
 
 class Constant(Tensor):
     def __init__(self, np_array):
-        super().__init__()
+        super().__init__(np_array.shape)
         self.val = np_array
 
     def evaluate(self, context):
