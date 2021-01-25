@@ -4,7 +4,8 @@ from mod.tensor.subtract import Subtract
 
 
 class SquaredError(BackPropOperation):
-    """Evaluates to half of the squared difference between in_a and in_b"""
+    """Evaluates to half of the squared L2 difference between in_a and in_b"""
+
     def __init__(self, in_a, in_b):
         super().__init__([in_a, in_b], ())
         self.in_a = in_a
