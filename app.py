@@ -1,6 +1,21 @@
-from mod import Constant, Add2, AddN, ComputeGraph, SquaredError
+# from mod import Constant, Add2, AddN, ComputeGraph, SquaredError
+# from mod.tensor.core import AddN
 import numpy as np
 import json
+
+
+from mod import AddN, Add2, StaticMultiply, Constant, SquaredError
+from mod.compute_graph import ComputeGraph
+
+# TODO:
+# Redefine interface to ComputeGraph
+# Write test cases
+# Make Sum operations properly differentiable
+# More operation types
+# Split into multiple files
+# Prune / simplify rules?
+# Add SGD utility function to ComputeGraph
+# Add readme
 
 
 w1 = Constant(np.array([1., 2., 3.]))
