@@ -12,7 +12,7 @@ w1.name_tag = "w1"
 w2.name_tag = "w2"
 w3.name_tag = "w3"
 
-graph = ComputeGraph(w1)
+graph = ComputeGraph()
 graph, gradient_map = graph.extend_with_gradients(j, [w1, w2, w3])
 w1_d = gradient_map[w1]
 w2_d = gradient_map[w2]

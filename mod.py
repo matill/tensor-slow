@@ -2,6 +2,18 @@ import numpy as np
 import json
 
 
+# TODO:
+# Remove list of nodes from ComputeGraph
+# Redefine interface to ComputeGraph
+# Shape variable in Tensor variables
+# Write test cases
+# Make Sum operations properly differentiable
+# More operation types
+# Split into multiple files
+# Prune / simplify rules?
+# Add SGD utility function to ComputeGraph
+# Add readme
+
 class Tensor:
     """Abstract base class for nodes in a graph that can be evaluated to return a numpy array."""
 
@@ -171,7 +183,7 @@ class Subtract(BackPropOperation):
 
 
 class AddN(BackPropOperation):
-    """Differentiable operation of adding two tensors"""
+    """Differentiable operation of adding a list of tensors"""
 
     def __init__(self, inputs):
         super().__init__()
@@ -265,14 +277,6 @@ class Constant(Tensor):
 
 class ComputeGraph:
     """Class to represent a collection of nodes that create a compute graph"""
-
-    def __init__(self, node_in_graph):
-        """Creates a ComputeGraph object that finds all nodes in the graph by traversing the graph."""
-        self.node_in_graph = node_in_graph
-        self.nodes = set()
-
-    def add_node(self, node):
-        self.nodes.add(node)
 
     def prune(self, required_outputs):
         """Creates a new compute graph that only contains the nodes required to compute the nodes in required_outputs"""
