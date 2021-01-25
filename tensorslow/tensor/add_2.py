@@ -1,4 +1,4 @@
-from mod.tensor.core import AddN
+from .core import AddN
 
 
 class Add2(AddN):

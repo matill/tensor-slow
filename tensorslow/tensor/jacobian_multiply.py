@@ -1,4 +1,4 @@
-from mod.tensor.core import Operation
+from .core import Operation
 
 
 class JacobianMultiply(Operation):

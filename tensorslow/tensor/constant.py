@@ -1,4 +1,4 @@
-from mod.tensor.core import Tensor
+from .core import Tensor
 import numpy as np
 
 

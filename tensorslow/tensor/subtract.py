@@ -1,4 +1,4 @@
-from mod.tensor.core import StaticMultiply, BackPropOperation
+from .core import StaticMultiply, BackPropOperation
 
 
 class Subtract(BackPropOperation):

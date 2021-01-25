@@ -1,6 +1,6 @@
 import numpy as np
-from mod.tensor.core import BackPropOperation
-from mod.tensor.subtract import Subtract
+from .core import BackPropOperation
+from .subtract import Subtract
 
 
 class SquaredError(BackPropOperation):
