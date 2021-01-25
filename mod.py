@@ -3,9 +3,8 @@ import json
 
 
 # TODO:
-# Remove list of nodes from ComputeGraph
-# Redefine interface to ComputeGraph
 # Shape variable in Tensor variables
+# Redefine interface to ComputeGraph
 # Write test cases
 # Make Sum operations properly differentiable
 # More operation types
@@ -83,10 +82,6 @@ class Tensor:
         if self.name_tag is not None:
             as_dict["name"] = self.name_tag
 
-
-        if self.inputs != []:
-            as_dict["inputs"] = [node.to_dict(context) for node in self.inputs]
-
         return as_dict
 
     def print_json(self, context):
@@ -95,6 +90,19 @@ class Tensor:
 
 class Operation(Tensor):
     """Abstract base class for operations in a graph that are evaluated using other input Tensors"""
+
+    def __init__(self, inputs):
+        super().__init__()
+        self.inputs = inputs
+
+        # Let the input nodes to know that this node depends on them as input
+        for node in inputs:
+            node.add_dependent_node(self)
+
+    def to_dict(self, context):
+        as_dict = super().to_dict(context)
+        as_dict["inputs"] = [node.to_dict(context) for node in self.inputs]
+        return as_dict
 
     def evaluate(self, context):
         if self in context:
@@ -125,12 +133,9 @@ class Add2(BackPropOperation):
     """Differentiable operation of adding two tensors"""
 
     def __init__(self, in_a, in_b):
-        super().__init__()
-        in_a.add_dependent_node(self)
-        in_b.add_dependent_node(self)
+        super().__init__([in_a, in_b])
         self.in_a = in_a
         self.in_b = in_b
-        self.inputs = [in_a, in_b]
 
     def compute(self, context):
         a = self.in_a.evaluate(context)
@@ -156,12 +161,9 @@ class Add2(BackPropOperation):
 
 class Subtract(BackPropOperation):
     def __init__(self, in_a, in_b):
-        super().__init__()
-        in_a.add_dependent_node(self)
-        in_b.add_dependent_node(self)
+        super().__init__([in_a, in_b])
         self.in_a = in_a
         self.in_b = in_b
-        self.inputs = [in_a, in_b]
 
     def compute(self, context):
         a = self.in_a.evaluate(context)
@@ -185,13 +187,6 @@ class Subtract(BackPropOperation):
 class AddN(BackPropOperation):
     """Differentiable operation of adding a list of tensors"""
 
-    def __init__(self, inputs):
-        super().__init__()
-        for node in inputs:
-            node.add_dependent_node(self)
-
-        self.inputs = inputs
-
     def compute(self, context):
         return np.sum(x.evaluate(context) for x in self.inputs)
 
@@ -208,11 +203,9 @@ class AddN(BackPropOperation):
 
 class StaticMutiply(Operation):
     def __init__(self, in_node, constant):
-        super().__init__()
+        super().__init__([in_node])
         self.in_node = in_node
         self.constant = constant
-        in_node.add_dependent_node(self)
-        self.inputs = [in_node]
 
     def compute(self, context):
         return self.in_node.evaluate(context) * self.constant
@@ -220,12 +213,9 @@ class StaticMutiply(Operation):
 
 class SquaredError(BackPropOperation):
     def __init__(self, in_a, in_b):
-        super().__init__()
-        in_a.add_dependent_node(self)
-        in_b.add_dependent_node(self)
+        super().__init__([in_a, in_b])
         self.in_a = in_a
         self.in_b = in_b
-        self.inputs = [in_a, in_b]
 
     def compute(self, context):
         a = self.in_a.evaluate(context)
@@ -269,7 +259,6 @@ class Constant(Tensor):
     def __init__(self, np_array):
         super().__init__()
         self.val = np_array
-        self.inputs = []
 
     def evaluate(self, context):
         return self.val
