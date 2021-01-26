@@ -19,6 +19,19 @@ class Tensor:
     def add_dependent_node(self, node):
         self.direct_dependent_nodes.append(node)
 
+    def recursively_add_nodes_to_set(self, node_set):
+        """Adds this node to the set, and recursively adds all other nodes in the graph to the set"""
+        if self in node_set:
+            return
+
+        node_set.add(self)
+        for node in self.get_directly_related_nodes():
+            node.recursively_add_nodes_to_set(node_set)
+
+    def get_directly_related_nodes(self):
+        """Returns all nodes that depend on this node"""
+        return self.direct_dependent_nodes
+
     def evaluate(self, context):
         raise NotImplementedError
 
@@ -98,6 +111,10 @@ class Operation(Tensor):
         # Let the input nodes to know that this node depends on them as input
         for node in inputs:
             node.add_dependent_node(self)
+
+    def get_directly_related_nodes(self):
+        """Returns all nodes that depend on this node, and the ones this node depends on"""
+        return self.direct_dependent_nodes + self.inputs
 
     def get_and_assert_common_shape_in_list(self, nodes):
         common_shape = None

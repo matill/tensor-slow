@@ -8,7 +8,7 @@ class Input(Tensor):
     def evaluate(self, context):
         assert self in context, f"Attempted to evaluate graph without specifying value of Input node: {self.to_dict(context)}"
         value = context[self]
-        if self.shape != None:
+        if self.shape is not None:
             assert self.shape == value.shape, f"Input node {self.to_dict(context)} expected value of shape {self.shape} != {value.shape}"
 
         return value
