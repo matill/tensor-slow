@@ -1,5 +1,5 @@
-from .core import Tensor
 import numpy as np
+from tensorslow.tensor.core import Tensor
 
 
 class Constant(Tensor):

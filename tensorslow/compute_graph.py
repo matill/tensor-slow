@@ -1,4 +1,4 @@
-from .tensor.variable import Variable
+from .tensor import Variable
 
 
 class ComputeGraph:

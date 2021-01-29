@@ -1,4 +1,4 @@
-from .core import AddN
+from tensorslow.tensor.core import AddN
 
 
 class Add2(AddN):

@@ -1,7 +1,7 @@
 import numpy as np
-from .core import BackPropOperation
-from .subtract import Subtract
-from .soft_max import SoftMax
+from tensorslow.tensor.core import BackPropOperation
+from tensorslow.tensor.standard_math_operations import Subtract
+from tensorslow.tensor.activation_functions import SoftMax
 
 
 class SoftMaxCrossEntropy(BackPropOperation):

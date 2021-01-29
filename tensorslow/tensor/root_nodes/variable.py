@@ -1,5 +1,5 @@
-from .core import Tensor
 import numpy as np
+from tensorslow.tensor.core import Tensor
 
 
 # TODO: Some room for optimization with respect to memory management using more complex numpy functions.

@@ -1,5 +1,5 @@
 import numpy as np
-from .core import Operation
+from tensorslow.tensor.core import Operation
 
 
 class SoftMax(Operation):

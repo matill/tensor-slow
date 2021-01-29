@@ -1,6 +1,5 @@
 import numpy as np
-from .core import Tensor
-
+from tensorslow.tensor.core import Tensor
 
 class Input(Tensor):
     """Node with optionally strict shape that is evaluated according to a value that is set in the context dictionary"""
