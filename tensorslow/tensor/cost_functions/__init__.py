@@ -1,1 +1,3 @@
 from .soft_max_cross_entropy import SoftMaxCrossEntropy
+from .sigmoid_cross_entropy import SigmoidCrossEntropy
+from .squared_error import SquaredError
