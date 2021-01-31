@@ -2,24 +2,24 @@ import numpy as np
 import json
 import tensorslow as ts
 
+
 # TODO:
-# Write test cases for extending with gradients and evaluation
-# Make Sum operations properly differentiable
-# More operation types (Sigmoid, Relu, CrossEntropy)
-# Make SoftMax operation differentiable if parent is CrossEntropy
-# Make SoftMaxCrossEntropy differentiable with respect to ground_truth
-# Make SoftMaxCrossEntropy able to back-propagate properly
+# Core stuff
+# When finding the gradient of a node, the shape of the gradient and the original node should have equal shape. Add assertions for this.
 # Create a common way to check if the same node already exists when creating it, and return the existing one????
 # Make context an optional argument to Tensor.evaluate
 # Prune / simplify rules?
-# Add Zero-Tensor type and add where necessary?
-# Tag gradients automatically if J and variable have names?
-# Implement JacobianMultiply
-# When finding the gradient of a node, the shape of the gradient and the original node should have equal shape. Add assertions for this.
-# Add __init__ file in tensor folder
 # evaluate() should check the shape
 # Special support for when the node we compute derivatives of has trivial gradients (sum, static multiply, etc...)
 # General way to handle if self == j when creating a derivative node (self.shape == (), simplified subgraph (without JacobianMultiply, etc...)) 
+# Tag gradients automatically if J and variable have names?
+
+# Other stuff
+# Write test cases for extending with gradients and evaluation
+# Make Sum operations properly differentiable
+# Make SoftMax operation differentiable if parent is CrossEntropy
+# Add Zero-Tensor type and add where appropriate?
+# Implement JacobianMultiply
 # Sigmoid should not require that in_node.shape == ()
 # Add readme
 
