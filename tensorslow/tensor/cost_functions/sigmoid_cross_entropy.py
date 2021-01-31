@@ -2,7 +2,7 @@ import numpy as np
 from tensorslow.tensor.core import BackPropOperation
 from tensorslow.tensor.standard_math_operations import Subtract
 from tensorslow.tensor.activation_functions import Sigmoid
-from tensorslow.tensor.standard_math_operations import ScalarTensorMultiply 
+from tensorslow.tensor.standard_math_operations import ScalarTensorMultiply
 
 
 class SigmoidCrossEntropy(BackPropOperation):
