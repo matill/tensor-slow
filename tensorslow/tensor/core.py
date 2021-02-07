@@ -144,7 +144,10 @@ class Operation(Tensor):
 
 
 class BackPropOperation(Operation):
-    """Base class for operations that have an extended interface to back propagate gradients"""
+    """
+    Base class for operations that have an extended interface to back propagate 
+    gradients.
+    """
 
     def get_parents_gradient(self, parent, j):
         """
@@ -155,6 +158,25 @@ class BackPropOperation(Operation):
 
     def get_jacobian_operation(self, parent):
         """Returns a node that computes d(self) / d(parent)"""
+        raise NotImplementedError
+
+
+class AssistedBackPropOperation(BackPropOperation):
+    """
+    Base class for operations that have an extended interface to back propagate
+    gradients, but implements some more functionality that are common for most operation.
+    """
+
+    def get_parents_gradient(self, parent, j):
+        assert parent in self.inputs, "get_parents_gradient called with parent argument that is not an input node"
+        if self is j:
+            assert self.shape == (), f"Tried to differentiate with j ({self}) not being a scalar"
+            return self.get_jacobian_operation(parent)
+        else:
+            self_gradient = self.get_gradient(j)
+            return self.get_parents_gradient_assisted(parent, j, self_gradient)
+
+    def get_parents_gradient_assisted(self, parent, self_gradient):
         raise NotImplementedError
 
 

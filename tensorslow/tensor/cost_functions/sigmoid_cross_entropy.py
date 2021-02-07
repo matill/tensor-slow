@@ -1,11 +1,11 @@
 import numpy as np
-from tensorslow.tensor.core import BackPropOperation
+from .cost_function import CostFunction
 from tensorslow.tensor.standard_math_operations import Subtract
 from tensorslow.tensor.activation_functions import Sigmoid
 from tensorslow.tensor.standard_math_operations import ScalarTensorMultiply
 
 
-class SigmoidCrossEntropy(BackPropOperation):
+class SigmoidCrossEntropy(CostFunction):
     """
     Applies sigmoid to an input value, and computes cross entropy of a that
     using a ground truth value.
@@ -42,14 +42,6 @@ class SigmoidCrossEntropy(BackPropOperation):
         term_a = y * np.log(sigmoid)
         term_b = (1 - y) * np.log(1 - sigmoid)
         return - term_a - term_b
-
-    def get_parents_gradient(self, parent, j):
-        jacobian = self.get_jacobian_operation(parent)
-        if j is self:
-            return jacobian
-        else:
-            self_gradient = self.get_gradient(j)
-            return ScalarTensorMultiply(self_gradient, jacobian)
 
     def get_jacobian_operation(self, parent):
         if parent is self.ground_truth:

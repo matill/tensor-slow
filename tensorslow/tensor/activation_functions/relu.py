@@ -1,9 +1,9 @@
 import numpy as np
-from tensorslow.tensor.core import BackPropOperation, Operation
+from tensorslow.tensor.core import AssistedBackPropOperation, Operation
 from tensorslow.tensor.standard_math_operations import ElementwiseMultiply
 
 
-class Relu(BackPropOperation):
+class Relu(AssistedBackPropOperation):
     """
     RELU activation. y_i = x_i if x_i > 0 else 0.
     """
@@ -16,14 +16,9 @@ class Relu(BackPropOperation):
         x = self.in_node.evaluate(context)
         return np.fmax(x, 0.)
 
-    def get_parents_gradient(self, parent, j):
-        # NOTE: Don't handle self == j
-        jacobian = self.get_jacobian_operation(parent)
-        self_gradient = self.get_gradient(j)
-        return ElementwiseMultiply([jacobian, self_gradient])
-
-    def get_jacobian_operation(self, parent):
-        return ReluDerivative(self.in_node)
+    def get_parents_gradient_assisted(self, parent, self_gradient):
+        self_over_parent_gradient = ReluDerivative(self.in_node, self.leaky_scale)
+        return ElementwiseMultiply([self_over_parent_gradient, self_gradient])
 
 
 class ReluDerivative(Operation):

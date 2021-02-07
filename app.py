@@ -13,6 +13,7 @@ import tensorslow as ts
 # Special support for when the node we compute derivatives of has trivial gradients (sum, static multiply, etc...)
 # General way to handle if self == j when creating a derivative node (self.shape == (), simplified subgraph (without JacobianMultiply, etc...)) 
 # Tag gradients automatically if J and variable have names?
+# Add support for momentum at training
 
 # Other stuff
 # Write test cases for extending with gradients and evaluation
@@ -21,6 +22,7 @@ import tensorslow as ts
 # Add Zero-Tensor type and add where appropriate?
 # Implement JacobianMultiply
 # Sigmoid should not require that in_node.shape == ()
+# Add CostFunction super-class
 # Add readme
 
 

@@ -1,9 +1,9 @@
 import numpy as np
-from tensorslow.tensor.core import BackPropOperation
+from .cost_function import CostFunction
 from tensorslow.tensor.standard_math_operations import Subtract
 
 
-class SquaredError(BackPropOperation):
+class SquaredError(CostFunction):
     """Evaluates to half of the squared L2 difference between in_a and in_b"""
 
     def __init__(self, in_a, in_b):
@@ -19,13 +19,6 @@ class SquaredError(BackPropOperation):
         print("a - b", a -b)
         norm = np.linalg.norm(a - b)
         return norm * norm * 0.5
-
-    def get_parents_gradient(self, parent, j):
-        jacobian = self.get_jacobian_operation(parent)
-        if self is j:
-            return jacobian
-        else:
-            return JacobianMultiply(self_gradient, jacobian)
 
     def get_jacobian_operation(self, parent):
         if parent == self.in_a and parent == self.in_b:

@@ -1,10 +1,10 @@
 import numpy as np
-from tensorslow.tensor.core import BackPropOperation
+from .cost_function import CostFunction
 from tensorslow.tensor.standard_math_operations import Subtract
 from tensorslow.tensor.activation_functions import SoftMax
 
 
-class SoftMaxCrossEntropy(BackPropOperation):
+class SoftMaxCrossEntropy(CostFunction):
     """
     Applies softmax to an input value, and computes cross entropy of a that
     using a ground truth value.
@@ -47,18 +47,13 @@ class SoftMaxCrossEntropy(BackPropOperation):
         log_of_sum = np.log(sum_e)
         return x_max * log_of_sum * y_sum - dot
 
-    def get_parents_gradient(self, parent, j):
+    def get_jacobian_operation(self, parent):
         """
         Returns a node that computes (dJ / dself) * (dself / dparent)
         = y - SoftMax(x)
         where x = self.softmax_input and y = self.ground_truth
         """
-        if j is self:
-            return self.get_jacobian_operation(parent)
-        else:
-            raise NotImplementedError
 
-    def get_jacobian_operation(self, parent):
         if parent is self.ground_truth:
             raise NotImplementedError
         elif parent is self.softmax_input:
