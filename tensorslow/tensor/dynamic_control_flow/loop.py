@@ -77,10 +77,12 @@ class NextIteration(Operation):
             key: A RecurrenceRelation object that is input to the same loop.
             value: A node that computes the next input to the loop.
         """
-        # Check that recurrence_relations includes all from enter_loop.
-        self.recurrence_relations = recurrence_relations
         inputs = set(recurrence_relations.values())
         super().__init__(inputs, None)
+        self.enter_loop = enter_loop
+        assert inputs == enter_loop.loop_inputs, "ERROR: NextIteration object did " \
+            + "not get a node that computes a new value for all recurrence relations"
+        self.recurrence_relations = recurrence_relations
 
     def compute(self, context):
         """
@@ -88,7 +90,10 @@ class NextIteration(Operation):
             key: A RecurrenceRelation object.
             value: The new value for the RecurrenceRelation object.
         """
-        raise NotImplementedError
+        return {
+            key: val.evaluate(context) for (key, val) \
+            in self.recurrence_relations.items()
+        }
 
 
 class ExitLoop(Operation):
@@ -107,8 +112,13 @@ class ExitLoop(Operation):
         self.outputs = outputs
 
         # Search for all nodes in the loop
-        self.loop_nodes = self.find_loop_nodes()
+        all_loop_nodes = self.find_loop_nodes()
 
+        # Split set of nodes into groups that are handled differently
+        # TODO: check that recurrences and loop_nodes fit the content of EnterLoop.
+        self.loop_inputs = {x for in all_loop_nodes if isinstance(x, LoopInput)}
+        self.recurrences = {x for in all_loop_nodes if isinstance(x, RecurrenceRelation)}
+        self.loop_nodes = (all_loop_nodes - self.loop_inputs) - self.recurrences
 
     def find_loop_nodes(self):
         """
@@ -179,6 +189,11 @@ class ExitLoop(Operation):
 
         return settled_nodes
 
+    def clear_context_cache(self, context, nodes):
+        for node in nodes:
+            if node in context:
+                del context[node]
+
     def compute(self, context):
         """
         Returns a dictionary where:
@@ -188,7 +203,28 @@ class ExitLoop(Operation):
         while True:
             do_new_iteration = self.loop_end_condition.evaluate(context)
             if do_new_iteration:
+                # Compute the input to the next iteration
                 new_input_vals = self.next_iteration.evaluate(context)
+
+                # Clear cached computations within the loop
+                self.clear_context_cache(context, self.loop_nodes)
+
+                # Set the new state of recurrence relations
+                for node, val in new_input_vals.items():
+                    node.update(context, val)
+
+            else:
+                # Evaluate the nodes that are returned from the loop
+                loop_outputs = {node: node.evaluate(context)}
+
+                # Clean up internal state and cached computations in the loop
+                # that are no longer useful.
+                # (loop-inputs, recurrence relations and internal operations)
+                for node_set in [self.loop_nodes, self.recurrences, self.loop_inputs]:
+                    self.clear_context_cache(context, node_set)
+
+                # Return results
+                return loop_outputs
 
 
 class LoopOutput(Operation):
