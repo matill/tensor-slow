@@ -16,37 +16,33 @@ class LoopInput(Operation):
 
     def compute(self, context):
         self.enter_loop.evaluate()
-        value = self.source.evaluate(context)
-        context[self] = value
-        return value
+        return self.source.evaluate(context)
 
 
-class RecurrenceRelation(Tensor):
+class RecurrenceRelation(Operation):
     """
     Special kind of loop input that gets an initial value at the first operation
     and gets a new value for each iteration.
     """
-    # TODO: Remove self from context at loop end?
 
     def __init__(self, enter_loop, initial):
         self.enter_loop = enter_loop
         self.enter_loop.add_recurrence_relation(self)
         self.initial = initial
 
-    def fetch_initial(self, context):
-        context[self] = self.initial.evaluate(context)
-
     def update(self, context, value):
         context[self] = value
 
-    def evaluate(self, context):
-        if not self in context:
-            self.enter_loop.evaluate(context)
-            assert self in context
-        return context[self]
+    def compute(self, context):
+        self.enter_loop.evaluate()
+        return self.initial.evaluate(context)
 
 
 class EnterLoop(Operation):
+    """Does not really have Operation semantics at all????"""
+
+    # TODO: Support waiting for "concurrent" operations
+    # to complete?
     def __init__(self):
         super().__init__([], None)
         self.recurrence_relations = []
@@ -79,10 +75,18 @@ class NextIteration(Operation):
         """
         inputs = set(recurrence_relations.values())
         super().__init__(inputs, None)
-        self.enter_loop = enter_loop
-        assert inputs == enter_loop.loop_inputs, "ERROR: NextIteration object did " \
-            + "not get a node that computes a new value for all recurrence relations"
+        
+        # Assert that the right set of recurrence relation objects are specified
+        my_recurrences = set(recurrence_relations.keys())
+        enter_loop_recurrences = set(enter_loop.recurrence_relations)
+        assert my_recurrences == enter_loop_recurrences, \
+                "ERROR: recurrence_relations argument passet to NextIteration \
+                constructor does not match the ones specified in the \
+                enter_loop object"
+
+        # Store args
         self.recurrence_relations = recurrence_relations
+        self.enter_loop = enter_loop
 
     def compute(self, context):
         """
