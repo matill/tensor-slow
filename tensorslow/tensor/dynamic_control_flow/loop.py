@@ -15,7 +15,7 @@ class LoopInput(Operation):
         self.source = source
 
     def compute(self, context):
-        self.enter_loop.evaluate()
+        self.enter_loop.evaluate(context)
         return self.source.evaluate(context)
 
 
@@ -26,6 +26,7 @@ class RecurrenceRelation(Operation):
     """
 
     def __init__(self, enter_loop, initial):
+        super().__init__([initial], initial.shape)
         self.enter_loop = enter_loop
         self.enter_loop.add_recurrence_relation(self)
         self.initial = initial
@@ -34,7 +35,7 @@ class RecurrenceRelation(Operation):
         context[self] = value
 
     def compute(self, context):
-        self.enter_loop.evaluate()
+        self.enter_loop.evaluate(context)
         return self.initial.evaluate(context)
 
 
@@ -49,10 +50,10 @@ class EnterLoop(Operation):
         self.loop_inputs = set()
 
     def add_recurrence_relation(self, node):
-        self.recurrence_relations.append(node)
+        self.recurrence_relations.add(node)
 
     def add_loop_input(self, node):
-        self.loop_inputs.append(node)
+        self.loop_inputs.add(node)
 
     def compute(self, context):
         # Only called in the first iteration.
@@ -118,12 +119,12 @@ class ExitLoop(Operation):
         all_loop_nodes = self.find_loop_nodes()
 
         # Split set of nodes into groups that are handled differently
-        self.loop_inputs = {x for in all_loop_nodes if isinstance(x, LoopInput)}
-        self.recurrences = {x for in all_loop_nodes if isinstance(x, RecurrenceRelation)}
+        self.loop_inputs = {x for x in all_loop_nodes if isinstance(x, LoopInput)}
+        self.recurrences = {x for x in all_loop_nodes if isinstance(x, RecurrenceRelation)}
         self.loop_nodes = (all_loop_nodes - self.loop_inputs) - self.recurrences
 
-        # Assert correctnes of the recurrencies and loop_inputs sets
-        assert self.recurrencies == self.enter_loop.recurrence_relations, \
+        # Assert correctnes of the recurrences and loop_inputs sets
+        assert self.recurrences == self.enter_loop.recurrence_relations, \
             "ERROR: ExitLoop was not able to find the same set of recurrence relation \
             objects that are registered in the EnterLoop object."
 
@@ -190,7 +191,7 @@ class ExitLoop(Operation):
                 # inputs to the new set of nodes to search.
                 settled_nodes.add(node)
                 if check_parents:
-                    next_unsettled += set(node.inputs)
+                    next_unsettled |= set(node.inputs)
 
             # Initialize the next iteration by updating unsettled_nodes.
             # The nested loop above may add nodes to next_unsettled that

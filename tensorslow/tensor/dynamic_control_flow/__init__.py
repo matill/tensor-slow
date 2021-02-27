@@ -1,1 +1,2 @@
-from loop.py import EnterLoop, NextIteration, ExitLoop, LoopState, 
+from .loop import LoopInput, RecurrenceRelation, EnterLoop, NextIteration, \
+        ExitLoop, LoopOutput

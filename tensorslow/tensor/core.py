@@ -205,7 +205,7 @@ class StaticMultiply(Operation):
     """Scales the input node by a constant value"""
 
     def __init__(self, in_node, constant):
-        super().__init__(in_node, in_node.shape)
+        super().__init__([in_node], in_node.shape)
         self.in_node = in_node
         self.constant = constant
 
