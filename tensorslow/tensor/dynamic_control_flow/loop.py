@@ -69,16 +69,6 @@ class BooleanOperation(Operation):
     pass
 
 
-class LoopEndCondition(Operation):
-    def compute(self, context):
-        """
-        Returns a boolean:
-            True --> Finish the iteration and start again
-            False --> Go to ExitLoop
-        """
-        raise NotImplementedError
-
-
 class NextIteration(Operation):
     def __init__(self, enter_loop, recurrence_relations):
         """
@@ -110,18 +100,84 @@ class ExitLoop(Operation):
         outputs: A list of nodes in the loop that this ExitLoop operation
         is able to output using a LoopOutput operation.
         """
+        super().__init__(outputs, None)
         self.next_iteration = next_iteration
+        self.enter_loop = next_iteration.enter_loop
         self.loop_end_condition = loop_end_condition
         self.outputs = outputs
 
-        # Search for all nodes in the loop, except for 
-        # LoopInput and RecurrenceRelation nodes.
-        root_loop_nodes = self.outputs + [loop_end_condition] \
-                    + next_iteration.recurrence_relations
+        # Search for all nodes in the loop
+        self.loop_nodes = self.find_loop_nodes()
 
-        loop_nodes = []
-        for node in root_loop_nodes:
-        super().__init__(outputs, None)
+
+    def find_loop_nodes(self):
+        """
+        Searches through all nodes that are input to this ExitLoop operation, or
+        to the NextIteration operation, and the loop-end-condition operation.
+        These nodes are used to clear the cached internal state of the loop between
+        iterations to make sure that operations are re-computed with the new
+        input that is provided by recurrence relations or new output from
+        stateful operations (Eg. FIFO-Queues or variables that have been updated).
+        """
+
+        # The set of nodes in the loop are added to this set
+        settled_nodes = set()
+
+        # A temporary set containing nodes in the loop.
+        # Nodes are moved from this set to settled_nodes
+        # when their parent/input nodes are added to unsettled_nodes.
+        unsettled_nodes = self.inputs
+        unsettled_nodes += self.next_iteration.inputs
+        unsettled_nodes.append(self.loop_end_condition)
+        unsettled_nodes = set(unsettled_nodes)
+
+        while len(unsettled_nodes) > 0:
+            next_unsettled = set()
+            for node in unsettled_nodes:
+
+                # Check if the node's parents/inputs should be added to the set.
+                # Eg. The LoopInput and RecurrenceRelation operations are the interface
+                # from the outside to the inside of the loop, so their parents do not
+                # belong in this set.
+                # Similarly, it can find the ExitLoop operation of a nested loop. While
+                # the outputs of the nested loop (which are the inputs to the nested
+                # ExitLoop operation) are part of this (outer) loop, the nested
+                # loop is responsible for cleaning up its own internal state,
+                # so these nodes are not added to the set.
+                if isinstance(node, RecurrenceRelation):
+                    # TODO: Assert that it belongs to the right loop.
+                    check_parents = False
+                elif isinstance(node, LoopInput):
+                    check_parents = False
+                elif isinstance(node, EnterLoop):
+                    assert False, "WARNING: Nodes cannot have EnterLoop as input"
+                elif isinstance(node, NextIteration):
+                    assert False, "WARNING: Nodes cannot have NextIteration as input"
+                elif isinstance(node, ExitLoop):
+                    check_parents = False
+                elif isinstance(node, LoopOutput):
+                    check_parents = True
+                elif isinstance(node, Operation):
+                    check_parents = True
+                elif isinstance(node, Tensor):
+                    check_parents = False
+                else:
+                    assert False, f"ExitLoop: Found node in loop-graph that is is not" \
+                            + " a tensor subclass: {node}"
+
+                # Add this node to the set of settled nodes, and add its parents/
+                # inputs to the new set of nodes to search.
+                settled_nodes.add(node)
+                if check_parents:
+                    next_unsettled += set(node.inputs)
+
+            # Initialize the next iteration by updating unsettled_nodes.
+            # The nested loop above may add nodes to next_unsettled that
+            # may already be in settled_nodes, so no need to repeat the
+            # procedure for those.
+            unsettled_nodes = next_unsettled - settled_nodes
+
+        return settled_nodes
 
     def compute(self, context):
         """
@@ -130,11 +186,9 @@ class ExitLoop(Operation):
             value: The value returned by the element in self.outputs
         """
         while True:
-            new_iteration = self.loop_end_condition.evaluate(context)
-            if new_iteration:
+            do_new_iteration = self.loop_end_condition.evaluate(context)
+            if do_new_iteration:
                 new_input_vals = self.next_iteration.evaluate(context)
-
-
 
 
 class LoopOutput(Operation):
