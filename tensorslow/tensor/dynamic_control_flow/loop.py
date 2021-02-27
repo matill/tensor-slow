@@ -45,10 +45,9 @@ class EnterLoop(Operation):
     # to complete?
     def __init__(self):
         super().__init__([], None)
-        self.recurrence_relations = []
-        self.loop_inputs = []
+        self.recurrence_relations = set()
+        self.loop_inputs = set()
 
-    # NOTE: May not be useful at all
     def add_recurrence_relation(self, node):
         self.recurrence_relations.append(node)
 
@@ -78,7 +77,7 @@ class NextIteration(Operation):
         
         # Assert that the right set of recurrence relation objects are specified
         my_recurrences = set(recurrence_relations.keys())
-        enter_loop_recurrences = set(enter_loop.recurrence_relations)
+        enter_loop_recurrences = enter_loop.recurrence_relations
         assert my_recurrences == enter_loop_recurrences, \
                 "ERROR: recurrence_relations argument passet to NextIteration \
                 constructor does not match the ones specified in the \
@@ -119,10 +118,18 @@ class ExitLoop(Operation):
         all_loop_nodes = self.find_loop_nodes()
 
         # Split set of nodes into groups that are handled differently
-        # TODO: check that recurrences and loop_nodes fit the content of EnterLoop.
         self.loop_inputs = {x for in all_loop_nodes if isinstance(x, LoopInput)}
         self.recurrences = {x for in all_loop_nodes if isinstance(x, RecurrenceRelation)}
         self.loop_nodes = (all_loop_nodes - self.loop_inputs) - self.recurrences
+
+        # Assert correctnes of the recurrencies and loop_inputs sets
+        assert self.recurrencies == self.enter_loop.recurrence_relations, \
+            "ERROR: ExitLoop was not able to find the same set of recurrence relation \
+            objects that are registered in the EnterLoop object."
+
+        assert self.loop_inputs == self.enter_loop.loop_inputs, \
+            "ERROR: ExitLoop was not able to find the same set of loop inputs \
+            objects that are registered in the EnterLoop object."
 
     def find_loop_nodes(self):
         """
