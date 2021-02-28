@@ -143,7 +143,7 @@ class ExitLoop(Operation):
         # A temporary set containing nodes in the loop.
         # Nodes are moved from this set to settled_nodes
         # when their parent/input nodes are added to unsettled_nodes.
-        unsettled_nodes = self.inputs
+        unsettled_nodes = [x for x in self.inputs]
         unsettled_nodes += self.next_iteration.inputs
         unsettled_nodes.append(self.loop_end_condition)
         unsettled_nodes = set(unsettled_nodes)
