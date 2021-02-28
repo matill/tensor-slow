@@ -16,6 +16,7 @@ import tensorslow as ts
 # Add support for momentum at training
 
 # Other stuff
+# LSTM builder utility
 # Write test cases for extending with gradients and evaluation
 # Make Sum operations properly differentiable
 # Make SoftMax operation differentiable if parent is CrossEntropy
@@ -38,31 +39,85 @@ class IsSmaller(ts.Operation):
         return in_val > self.val
 
 
-# class RecurrentNetwork(ts.ComputeGraph):
-    # def __init__(self):
+class Not(ts.Operation):
+    def __init__(self, input_node):
+        super().__init__([input_node], None)
+        self.input = input_node
 
+    def compute(self, context):
+        return not self.input.evaluate(context)
 
-enter_loop = ts.EnterLoop()
+# Queues, variables, and initialization
+zero = ts.Constant(np.array([.0, .0, .0]))
 queue = ts.FIFOQueue([
-    np.array([1, 2, 3]),
-    np.array([1, 1, 1]),
-    np.array([0, 0, 0]),
+    # np.array([1, 2]),
+    # np.array([1, 1]),
+    np.array([0, 0]),
 ])
-dequeue = ts.Dequeue(queue)
-zero = ts.Constant(np.array([0.1, 0.0, 0.0]))
-cost = ts.SquaredError(dequeue, zero)
-loop_end_condition = IsSmaller(cost, 0.2)
 
-next_iteration = ts.NextIteration(enter_loop, {}).tag("next_iteration")
-exit_loop = ts.ExitLoop(next_iteration, loop_end_condition, [cost, dequeue]).tag("exit_loop")
-cost_out = ts.LoopOutput(exit_loop, cost).tag("cost_out")
-dequeue_out = ts.LoopOutput(exit_loop, dequeue).tag("dequeue_out")
+dim_in = 2
+dim_hid = 3
+wx = ts.Variable(np.arange(dim_in * 4 * dim_hid).reshape((4 * dim_hid, dim_in)) * 0.001)
+wh = ts.Variable(np.arange(dim_hid * 4 * dim_hid).reshape((4 * dim_hid, dim_hid)) * 0.001)
+b = ts.Variable(np.arange(4 * dim_hid).reshape((4 * dim_hid)))
+
+# Loop start and recurrence relations
+enter_loop = ts.EnterLoop()
+h = ts.RecurrenceRelation(enter_loop, zero)
+c = ts.RecurrenceRelation(enter_loop, zero)
+x = ts.Dequeue(queue)
+
+# Checks if loop has ended
+loop_end_condition = Not(ts.IsQueueEmpty(queue))
+
+# Computes output of sigmoid and tanh
+L = ts.AddN([
+    ts.MatMul(wx, x),
+    ts.MatMul(wh, h),
+    b
+]).tag("L")
+f =   ts.Sigmoid(L[0 * dim_hid : 1 * dim_hid])
+i =   ts.Sigmoid(L[1 * dim_hid : 2 * dim_hid])
+cprime = ts.Tanh(L[2 * dim_hid : 3 * dim_hid]).tag("cprime")
+o =   ts.Sigmoid(L[3 * dim_hid : 4 * dim_hid]).tag("o")
+
+# Computes next c
+c_next = ts.Add2(
+    ts.ElementwiseMultiply([c, f]),
+    ts.ElementwiseMultiply([i, cprime])
+)
+
+# Computes next h
+h_next = ts.ElementwiseMultiply([
+    o,
+    ts.Tanh(c_next).tag("cnext_tanh")
+]).tag("h_next")
+
+# Feed c_next and h_next to next iteration
+next_iteration = ts.NextIteration(enter_loop, {c:c_next, h:h_next})
+
+# End loop when queue is empty. Output h
+exit_loop = ts.ExitLoop(next_iteration, loop_end_condition, [h])
+
+# Get the last h value
+h_out = ts.LoopOutput(exit_loop, h)
+
+
+# cost = ts.SquaredError(dequeue, zero)
+# loop_end_condition = IsSmaller(cost, 0.2)
+
+# next_iteration = ts.NextIteration(enter_loop, {}).tag("next_iteration")
+# exit_loop = ts.ExitLoop(next_iteration, loop_end_condition, [cost, dequeue]).tag("exit_loop")
+# cost_out = ts.LoopOutput(exit_loop, cost).tag("cost_out")
+# dequeue_out = ts.LoopOutput(exit_loop, dequeue).tag("dequeue_out")
 
 context = {}
-cost_out = cost_out.evaluate(context)
-print("cost_out: ", cost_out, type(cost_out))
-dequeue_out = dequeue_out.evaluate(context)
-print("dequeue_out: ", dequeue_out, type(dequeue_out))
+h_out = h_out.evaluate(context)
+print("h_out: ", h_out, type(h_out))
+# dequeue_out = dequeue_out.evaluate(context)
+# print("dequeue_out: ", dequeue_out, type(dequeue_out))
+
+
 
 # context = {}
 # exit_loop.evaluate(context)

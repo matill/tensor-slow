@@ -1,1 +1,1 @@
-from .fifoqueue import FIFOQueue, Enqueue, Dequeue
+from .fifoqueue import FIFOQueue, Enqueue, Dequeue, IsQueueEmpty
