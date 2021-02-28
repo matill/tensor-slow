@@ -220,6 +220,7 @@ class ExitLoop(Operation):
 
                 # Clear cached computations within the loop
                 self.clear_context_cache(context, self.loop_nodes)
+                self.clear_context_cache(context, [self.next_iteration])
 
                 # Set the new state of recurrence relations
                 for node, val in new_input_vals.items():
@@ -227,18 +228,23 @@ class ExitLoop(Operation):
 
             else:
                 # Evaluate the nodes that are returned from the loop
-                loop_outputs = {node: node.evaluate(context)}
+                loop_outputs = {
+                    node: node.evaluate(context) for node in self.outputs
+                }
 
                 # Clean up internal state and cached computations in the loop
                 # that are no longer useful.
-                # (loop-inputs, recurrence relations and internal operations)
-                for node_set in [self.loop_nodes, self.recurrences, self.loop_inputs]:
+                # (loop-inputs, recurrence relations and internal operations, EnterLoop)
+                for node_set in [self.loop_nodes, self.recurrences, \
+                                self.loop_inputs, [self.enter_loop]]:
                     self.clear_context_cache(context, node_set)
 
                 # Return results
                 return loop_outputs
 
 
+# TODO: Make this automatically add itself to the set of outputs
+# in the exit_loop object!!!
 class LoopOutput(Operation):
     """
     A special kind of operation that enables loops to produce output that can be
@@ -252,12 +258,14 @@ class LoopOutput(Operation):
         output: An operation within exit_loop.outputs. LoopOut.evaluate
         returns the same value as output.evaluate.
         """
+        super().__init__([exit_loop], output.shape)
+        assert output in exit_loop.outputs, "LoopOutput object created where the \
+                output node is not in the ExitLoop objects list of output nodes."
+
         self.exit_loop = exit_loop
-        self.key = key
-        shape = exit_loop.outputs[key].shape
-        super().__init__([exit_loop], shape)
+        self.output = output
 
     def compute(self, context):
-        output_vals = self.exit_loop.evaluate()
-        return output_vals[self.key]
+        output_vals = self.exit_loop.evaluate(context)
+        return output_vals[self.output]
 

@@ -72,14 +72,10 @@ class Tensor:
         return False
 
     def __str__(self):
-        nodes = "\n".join([node.__str__().replace('\n', '\n\t') for node in self.inputs])
-        if len(nodes) > 0:
-            nodes = "\n" + nodes
-        
         if self.name_tag is None:
-            return f"{type(self)}{nodes}"
+            return f"{type(self)}"
         else:
-            return f"{type(self)} ({self.name_tag}){nodes}"
+            return f"{type(self)}: ({self.name_tag})"
 
     def to_dict(self, context):
         as_dict = {
