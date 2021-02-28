@@ -60,11 +60,6 @@ class EnterLoop(Operation):
         return None
 
 
-class BooleanOperation(Operation):
-    """Class of operations that evaluates to a single boolean"""
-    pass
-
-
 class NextIteration(Operation):
     def __init__(self, enter_loop, recurrence_relations):
         """
