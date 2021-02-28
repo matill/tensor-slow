@@ -96,6 +96,9 @@ class Tensor:
         self.name_tag = name_tag
         return self
 
+    def __getitem__(self, key):
+        return TensorIndex(self, key)
+
 
 class Operation(Tensor):
     """Abstract base class for operations in a graph that are evaluated using other input Tensors"""
@@ -207,3 +210,23 @@ class StaticMultiply(Operation):
 
     def compute(self, context):
         return self.in_node.evaluate(context) * self.constant
+
+
+# TODO: Make differentiable
+# Check shape
+class TensorIndex(Operation):
+    """
+    Operation that indexes numpy arrays equivalently to the [] operator.
+    Not meant to be used directly by users. Use Tensor[<args>] (which is
+    implemented by Tensor.__getitem__(key)) to construct a TensorIndex
+    object in a simple and correct way.
+    """
+
+    def __init__(self, in_node, key):
+        super().__init__([in_node], None)
+        self.in_node = in_node
+        self.key = key
+
+    def compute(self, context):
+        in_val = self.in_node.evaluate(context)
+        return in_val.__getitem__(self.key)
