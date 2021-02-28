@@ -10,9 +10,9 @@ class Tanh(Operation):
 
     def compute(self, context):
         x = self.in_node.evaluate(context)
-        print(self, x)
-        y = x*2
+        y = x * (-2)
         np.exp(y, out=y)
+        np.add(1, y, out=y)
         np.divide(2, y, out=y)
-        y -= 1
+        np.subtract(y, 1, out=y)
         return y
