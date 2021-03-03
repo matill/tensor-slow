@@ -3,6 +3,49 @@ import numpy as np
 from tensorslow.tensor.core import Tensor, Operation
 
 
+
+# New things to support:
+# Remove NextIteration
+# Add RecRelNew
+# Add new LoopOutputs to a loop after EndLoop is defined
+# Add new LoopInputs to a loop after EndLoop is defined
+# A way to add shadow dependencies to LoopEnd after LoopEnd is defined
+# A way to replace dependencies to a node?
+# Get gradient through specific paths?
+
+# Workflow:
+# 1. Create all RecRel objects
+# 2. Create EnterLoop object 
+# 3:
+#   a: Create all RecRelNew objects
+#   b: Create SOME LoopOut objects
+#   c: Create loop end condition (BooleanOperation)
+#   d: Create some LoopInput objects.
+# 4: Create EndLoop (Check dependencies of all RecRelNews, 
+    # LoopOuts and the loop-end-condition:
+        # * They should be flagged to be contained in THIS loop.
+        # * Inverse dependencies cannot possibly be contained in another
+        #   loop if their respective dependencies (which we will investigate
+        #   when checking our own dependencies) are not contained in any loop.
+        # * Terminate the search at RecRel and LoopInput nodes.
+        # * All RecRel nodes should have a single corresponding RecRelNew object,
+        #   and that RecRelNew SHOULD BE provided to the LoopEnd.
+        # * Only Operation and Constant nodes are allowed in the loop 
+        #   (no Variable, Queue, or Input nodes.)
+        # * The provided RecRelNews' corresponsing RecRels' should have the right EnterLoop (both ways)
+# 5 (optional, repeated):
+    # a: Add new LoopOutput to the LoopEnd:
+        # * Check this LoopOutput's dependencies as described above
+    # b: Add a new LoopInput to the loop.
+    # c: Add a new "withinin-loop" node to the loop.
+        # * This node needs to be aware of it's membership in the node
+        #   without the user manually making it happen (through dependencies)
+        # * Either all it's dependencies belong to the loop, or none of them do.
+        # * Its inputs must be an Operation sub-class or Constant.
+    # d: Add shadow-dependencies to EndLoop. This must be contained in the loop.
+
+
+
 class LoopInput(Operation):
     """
     Used to access Tensor objects that are evaluated before the loop starts,
