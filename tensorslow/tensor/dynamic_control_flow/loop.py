@@ -12,22 +12,36 @@ from tensorslow.tensor.core import Tensor, Operation
 # A way to add shadow dependencies to LoopEnd after LoopEnd is defined
 # A way to replace dependencies to a node?
 # Get gradient through specific paths?
+# Normal nodes with inputs that are in a loop should automatically be flagged
+#   as a loop member, and the EndLoop should add them (and all their dependencies)
+#   to the set of members (and tag all their dependencies).
+# Normal nodes with input from two different loops should raise an exception.
+# LoopOut and LoopEnd nodes should not be flagged as loop members, unless nested.
+# LoopInput and RecRel nodes should or should be flagged to make it simple
+#   for the nodes that depend on them to flag temselves as loop members.
+# RecRelOut nodes should or should not be flagged???? I dont think it matters
+#   No nodes depend on RecRelOut nodes, so they can only be found in the inverse
+#   -dependency search. Here it can be usefull for them to be tagged.
+
+
 
 # Workflow:
 # 1. Create all RecRel objects
-# 2. Create EnterLoop object 
+# 2. Create EnterLoop object
 # 3:
 #   a: Create all RecRelNew objects
-#   b: Create SOME LoopOut objects
 #   c: Create loop end condition (BooleanOperation)
 #   d: Create some LoopInput objects.
 # 4: Create EndLoop (Check dependencies of all RecRelNews, 
-    # LoopOuts and the loop-end-condition:
+    # and the loop-end-condition:
         # * They should be flagged to be contained in THIS loop.
-        # * Inverse dependencies cannot possibly be contained in another
-        #   loop if their respective dependencies (which we will investigate
-        #   when checking our own dependencies) are not contained in any loop.
-        # * Terminate the search at RecRel and LoopInput nodes.
+        # * Inverse dependencies also need to be flagged to be contained in the loop.
+        # * Terminate the dependency search at RecRel and LoopInput nodes.
+        # * When the dependency search finds LoopOut nodes it should continue searching
+        #   through the corresponding RecRel and LoopIn nodes.
+        # * Terminate the inverse dependency search at RecRelOut, LoopOut.
+        # * When the inverse-dependency search finds LoopIn or RecRel nodes it should
+        #   continue searching throgh the corresponding LoopOut nodes.
         # * All RecRel nodes should have a single corresponding RecRelNew object,
         #   and that RecRelNew SHOULD BE provided to the LoopEnd.
         # * Only Operation and Constant nodes are allowed in the loop 
@@ -45,21 +59,36 @@ from tensorslow.tensor.core import Tensor, Operation
     # d: Add shadow-dependencies to EndLoop. This must be contained in the loop.
 
 
+class EnterLoop(Operation):
+    """Does not really have Operation semantics at all????"""
 
-class LoopInput(Operation):
-    """
-    Used to access Tensor objects that are evaluated before the loop starts,
-    and are therefore not part of the loop. This makes sure that the source
-    operation is not re-evaluated at each operation.
-    """
-    def __init__(self, enter_loop, source):
-        self.enter_loop = enter_loop
-        self.enter_loop.add_loop_input(self)
-        self.source = source
+    def __init__(self):
+        super().__init__([], None)
+        self.loop_inputs = set()
+        self.rec_rels = set()
+        self.loop_end = None
+
+    def add_loop_input(self, node):
+        assert type(loop_end) is LoopInput
+        self.loop_inputs.add(node)
+
+    def add_rec_rel(self, node):
+        assert type(node) is RecurrenceRelation
+        assert self.loop_end is None, "ERROR: Added a RecurrenceRelation to a loop \
+                that has already defined the fixed set of recurrence relations."
+
+        self.rec_rels.add(node)
+
+    def set_loop_end(self, loop_end):
+        assert type(loop_end) is LoopEnd
+        assert self.loop_end is None, "EnterLoop object already has a corresponding LoopEnd object"
+        self.loop_end = loop_end
 
     def compute(self, context):
-        self.enter_loop.evaluate(context)
-        return self.source.evaluate(context)
+        # If this function is called it means the EnterLoop object was not "activated"
+        # in the context, which means a node in the loop's "evaluate" function
+        # was called directly, and not through a LoopOutput node.
+        assert False
 
 
 class RecurrenceRelation(Operation):
@@ -68,11 +97,23 @@ class RecurrenceRelation(Operation):
     and gets a new value for each iteration.
     """
 
-    def __init__(self, enter_loop, initial):
+    def __init__(self, initial, enter_loop):
         super().__init__([initial], initial.shape)
-        self.enter_loop = enter_loop
-        self.enter_loop.add_recurrence_relation(self)
+        self.rec_rel_out = None
         self.initial = initial
+        assert type(enter_loop) is EnterLoop, "Expected enter_loop to be of type EnterLoop"
+        self.enter_loop = enter_loop
+        enter_loop.add_rec_rel(self)
+
+    def set_rec_rel_out(self, rec_rel_out):
+        assert type(rec_rel_out) is RecurrenceRelationOut, \
+                    "ERROR: RecurrenceRelation.set_rec_rel_out called with \
+                    argument that is not of RecurrenceRelationOut type"
+
+        assert self.rec_rel_out is None, "RecurrenceRelation object was  \
+                    added to more than one RecurrenceRelationOut object"
+
+        self.rec_rel_out = rec_rel_out
 
     def update(self, context, value):
         context[self] = value
@@ -82,64 +123,73 @@ class RecurrenceRelation(Operation):
         return self.initial.evaluate(context)
 
 
-class EnterLoop(Operation):
-    """Does not really have Operation semantics at all????"""
+class RecurrenceRelationOut(Operation):
+    """
+    Input to a node of this type becomes the output of the corresponding 
+    RecurrenceRelation object in the next loop iteration.
+    """
 
-    # TODO: Support waiting for "concurrent" operations
-    # to complete?
-    def __init__(self):
-        super().__init__([], None)
-        self.recurrence_relations = set()
-        self.loop_inputs = set()
+    def __init__(self, rec_rel, source):
+        super().__init__([source], source.shape)
+        self.source = source
+        self.rec_rel = rec_rel
+        rec_rel.set_rec_rel_out(self)
 
-    def add_recurrence_relation(self, node):
-        self.recurrence_relations.add(node)
-
-    def add_loop_input(self, node):
-        self.loop_inputs.add(node)
+    def add_dependent_node(self, node):
+        super().add_dependent_node(self, node)
+        print("WARNING: A node uses a RecurrenceRelationOut as input")
 
     def compute(self, context):
-        # Only called in the first iteration.
-        return None
+        return self.source.evaluate(context)
 
 
-class NextIteration(Operation):
-    def __init__(self, enter_loop, recurrence_relations):
-        """
-        enter_loop: The EnterLoop operation in the same loop.
-        recurrence_relations: A dictionary of:
-            key: A RecurrenceRelation object that is input to the same loop.
-            value: A node that computes the next input to the loop.
-        """
-        inputs = set(recurrence_relations.values())
-        super().__init__(inputs, None)
-        
-        # Assert that the right set of recurrence relation objects are specified
-        my_recurrences = set(recurrence_relations.keys())
-        enter_loop_recurrences = enter_loop.recurrence_relations
-        assert my_recurrences == enter_loop_recurrences, \
-                "ERROR: recurrence_relations argument passet to NextIteration \
-                constructor does not match the ones specified in the \
-                enter_loop object"
+class LoopInput(Operation):
+    """
+    Used to access Tensor objects that are evaluated before the loop starts,
+    and are therefore not part of the loop. This makes sure that the source
+    operation is not re-evaluated at each operation.
+    """
 
-        # Store args
-        self.recurrence_relations = recurrence_relations
+    def __init__(self, enter_loop, source):
+        super().__init__([source], source.shape)
         self.enter_loop = enter_loop
+        self.enter_loop.add_loop_input(self)
+        self.source = source
 
     def compute(self, context):
-        """
-        Returns a dictionary where:
-            key: A RecurrenceRelation object.
-            value: The new value for the RecurrenceRelation object.
-        """
-        return {
-            key: val.evaluate(context) for (key, val) \
-            in self.recurrence_relations.items()
-        }
+        self.enter_loop.evaluate(context)
+        return self.source.evaluate(context)
 
 
-class ExitLoop(Operation):
-    def __init__(self, next_iteration, loop_end_condition, outputs):
+class LoopOutput(Operation):
+    """
+    A special kind of operation that enables loops to produce output that can be
+    accessed after the loop has finished.
+    Operations outside the loop that only needs the value after the loop has terminated should
+    access it through the LoopOutput operation to not be included in the loop.
+    """
+
+    def __init__(self, source, exit_loop):
+        """
+        source: A node within the loop. The LoopOutput returns the same value as source.
+        """
+
+        super().__init__([source], source.shape)
+        self.source = source
+        self.exit_loop = exit_loop
+        exit_loop.add_loop_output(self)
+
+    def add_dependent_node(self, node):
+        super().add_dependent_node(self, node)
+        print("TODO: Make this function check that the dependent node is not in the same loop.")
+
+    def compute(self, context):
+        self.exit_loop.evaluate(context)
+        return self.source.evaluate(context)
+
+
+class EndLoop(Operation):
+    def __init__(self, enter_loop, rec_rel_outs, loop_end_condition, loop_outputs):
         """
         next_iteration: The NextIteration operation in the same loop.
         loop_end_condition: A BooleanOperation that tells if the loop
@@ -169,6 +219,9 @@ class ExitLoop(Operation):
         assert self.loop_inputs == self.enter_loop.loop_inputs, \
             "ERROR: ExitLoop was not able to find the same set of loop inputs \
             objects that are registered in the EnterLoop object."
+
+    def add_loop_output(self, loop_output):
+        raise NotImplementedError
 
     def find_loop_nodes(self):
         """
@@ -279,31 +332,4 @@ class ExitLoop(Operation):
 
                 # Return results
                 return loop_outputs
-
-
-# TODO: Make this automatically add itself to the set of outputs
-# in the exit_loop object!!!
-class LoopOutput(Operation):
-    """
-    A special kind of operation that enables loops to produce output that can be
-    accessed after the loop has finished.
-    Operations outside the loop that only needs the value after the loop has terminated should
-    access it through the LoopOutput operation to not be included in the loop.
-    """
-    def __init__(self, exit_loop, output):
-        """
-        exit_loop: The ExitLoop operation of the given loop.
-        output: An operation within exit_loop.outputs. LoopOut.evaluate
-        returns the same value as output.evaluate.
-        """
-        super().__init__([exit_loop], output.shape)
-        assert output in exit_loop.outputs, "LoopOutput object created where the \
-                output node is not in the ExitLoop objects list of output nodes."
-
-        self.exit_loop = exit_loop
-        self.output = output
-
-    def compute(self, context):
-        output_vals = self.exit_loop.evaluate(context)
-        return output_vals[self.output]
 
