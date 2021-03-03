@@ -14,6 +14,9 @@ import tensorslow as ts
 # General way to handle if self == j when creating a derivative node (self.shape == (), simplified subgraph (without JacobianMultiply, etc...)) 
 # Tag gradients automatically if J and variable have names?
 # Add support for momentum at training
+# Replace self.is_j_dependent_on(j) with self.is_dependent_on(other)
+# Instead? Make other.get_parents_gradient(self, j) return None if j does not depend on j?
+# |--> This can open for new possibilities with constant(0) being equivalent with None.
 
 # Other stuff
 # LSTM builder utility
