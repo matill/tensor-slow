@@ -1,2 +1,2 @@
-from .loop import LoopInput, RecurrenceRelation, RecurrenceRelationOut, \
+from .loop import RecurrenceRelation, RecurrenceRelationOut, \
         EnterLoop, EndLoop

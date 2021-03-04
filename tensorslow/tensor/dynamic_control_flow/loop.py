@@ -103,6 +103,7 @@ class EnterLoop(Operation):
     def __init__(self):
         super().__init__([], None, find_loop_tag=False)
         self.loop_tag = self
+        self.loop_input_map = {}
         self.loop_inputs = set()
         self.rec_rels = set()
         self.operations = set()
@@ -114,9 +115,17 @@ class EnterLoop(Operation):
         # to distinguish between "not set" and "None".
         self.outer_loop_tag = False
 
-    def add_loop_input(self, node):
-        assert type(node) is LoopInput
-        self.loop_inputs.add(node)
+    def input(self, source):
+        # If already created return the same LoopInput
+        if source in self.loop_input_map:
+            return self.loop_input_map[source]
+
+        # Create, store, and return a new LoopInput for the given source
+        self.set_outer_loop_tag(source.get_loop_tag())
+        loop_input = LoopInput(self, source)
+        self.loop_inputs.add(loop_input)
+        self.loop_input_map[source] = loop_input
+        return loop_input
 
     def add_rec_rel(self, node):
         assert type(node) is RecurrenceRelation
@@ -221,8 +230,6 @@ class LoopInput(Operation):
         self.loop_tag = enter_loop
         self.source = source
         self.enter_loop = enter_loop
-        enter_loop.add_loop_input(self)
-        enter_loop.set_outer_loop_tag(source.get_loop_tag())
 
     def compute(self, context):
         self.enter_loop.evaluate(context)
