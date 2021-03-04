@@ -253,7 +253,6 @@ class LoopOutput(Operation):
         self.loop_tag = end_loop.loop_tag
         self.source = source
         self.end_loop = end_loop
-        end_loop.add_loop_output(self)
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
@@ -286,10 +285,16 @@ class EndLoop(Operation):
         self.loop_end_condition = loop_end_condition
         self.rec_rel_outs = rec_rel_outs
         self.shadow_dependencies = set()
-        self.loop_outputs = []
+        self.loop_outputs = {}
 
-    def add_loop_output(self, loop_output):
-        self.loop_outputs.append(loop_output)
+    def output(self, source):
+        assert source.get_loop_tag() is self.enter_loop, "EndLoop.output exects " +\
+                                            "'source' to be a node within the loop."
+
+        if not source in self.loop_outputs:
+            self.loop_outputs[source] = LoopOutput(source, self)
+
+        return self.loop_outputs[source]
 
     def add_shadow_dependency(self, node):
         self.shadow_dependencies.add(node)
@@ -340,7 +345,8 @@ class EndLoop(Operation):
             else:
                 # Evaluate the nodes that are returned from the loop
                 loop_outputs = {
-                    node: node.source.evaluate(context) for node in self.loop_outputs
+                    loop_output: source.evaluate(context) \
+                    for (source, loop_output) in self.loop_outputs.items()
                 }
 
                 # Clean up internal state and cached computations in the loop
