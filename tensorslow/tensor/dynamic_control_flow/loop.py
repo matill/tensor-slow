@@ -15,7 +15,7 @@ from tensorslow.tensor.core import Tensor, Operation
 # RecurrenceRelation and LoopInput: The corresponding loop they provide into to,
 #   since all "normal" nodes within the loop inherit their loop tags.
 #   can easily inherit it.
-# RecurrenceRelationOut: The tag of their corresponding loop. Exactly what tag
+# RecurrenceRelationNext: The tag of their corresponding loop. Exactly what tag
 #   they get isn't really that important.
 
 
@@ -25,7 +25,7 @@ class Loop(Operation):
         self.loop_input_map = {}
         self.loop_inputs = set()
         self.rec_rels = set()
-        self.rec_rel_outs = []
+        self.rec_rel_nexts = []
         self.operations = set()
         self.loop_end_condition = None
         self.loop_outputs = {}
@@ -89,15 +89,15 @@ class Loop(Operation):
                                                 from the same outer loop."
 
     def _assert_has_all_recrel_nexts(self):
-        # Make sure the entire set of rec_rel_outs is known.
-        if len(self.rec_rels) > len(self.rec_rel_outs):
-            self.rec_rel_outs = [
-                rec_rel.rec_rel_out
+        # Make sure the entire set of rec_rel_nexts is known.
+        if len(self.rec_rels) > len(self.rec_rel_nexts):
+            self.rec_rel_nexts = [
+                rec_rel.rec_rel_next
                 for rec_rel in self.rec_rels
-                if rec_rel.rec_rel_out is not None
+                if rec_rel.rec_rel_next is not None
             ]
 
-        assert len(self.rec_rels) == len(self.rec_rel_outs), "Tried to evaluate " +\
+        assert len(self.rec_rels) == len(self.rec_rel_nexts), "Tried to evaluate " +\
                 "loop before all recurrence relations have been given a source " +\
                 "node to compute their value in the next iteration."
 
@@ -140,10 +140,10 @@ class Loop(Operation):
             if do_new_iteration:
 
                 # Compute the next value for the recurrence relations
-                # Store results as (RecRelOut, val) tuples
+                # Store results as (RecRel, val) tuples
                 next_vals = []
                 for rec_rel in rec_rels:
-                    val = rec_rel.rec_rel_out.evaluate(context)
+                    val = rec_rel.rec_rel_next.evaluate(context)
                     next_vals.append((rec_rel, val))
 
                 # Execute shadow dependencies
@@ -152,7 +152,7 @@ class Loop(Operation):
 
                 # Clear cached computations within the loop
                 self._clear_context_cache(context, loop_nodes)
-                self._clear_context_cache(context, self.rec_rel_outs)
+                self._clear_context_cache(context, self.rec_rel_nexts)
 
                 # Set the new state of recurrence relations
                 for rec_rel, val in next_vals:
@@ -192,20 +192,20 @@ class RecurrenceRelation(Operation):
     def __init__(self, initial, loop):
         super().__init__([initial], initial.shape, find_loop_tag=False)
         self.loop_tag = loop
-        self.rec_rel_out = None
+        self.rec_rel_next = None
         self.initial = initial
         assert type(loop) is Loop, f"Expected loop to be of type " + \
                                     f"Loop. Got {type(loop)}"
         self.loop = loop
 
     def next_iteration(self, source):
-        assert self.rec_rel_out is None, "RecurrenceRelation's next_iteration " +\
+        assert self.rec_rel_next is None, "RecurrenceRelation's next_iteration " +\
                                         "source has already been set"
 
         assert source.get_loop_tag() is self.get_loop_tag(), "Expected source " +\
                 "to be a node within the same loop as the RecurrenceRelation node"
 
-        self.rec_rel_out = RecurrenceRelationOut(self, source)
+        self.rec_rel_next = RecurrenceRelationNext(self, source)
 
     def _update(self, context, value):
         context[self] = value
@@ -215,7 +215,7 @@ class RecurrenceRelation(Operation):
         return self.initial.evaluate(context)
 
 
-class RecurrenceRelationOut(Operation):
+class RecurrenceRelationNext(Operation):
     """
     Input to a node of this type becomes the output of the corresponding 
     RecurrenceRelation object in the next loop iteration.
@@ -228,7 +228,7 @@ class RecurrenceRelationOut(Operation):
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
-        print("WARNING: A node uses a RecurrenceRelationOut as input")
+        print("WARNING: A node uses a RecurrenceRelationNext as input")
 
     def compute(self, context):
         return self.source.evaluate(context)
