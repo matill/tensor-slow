@@ -122,12 +122,12 @@ class Operation(Tensor):
 
     def find_loop_tag_from_inputs(self):
         # Find the loop tags of the inputs and make sure they all have the same
-        if len(inputs) == 0:
+        if len(self.inputs) == 0:
             loop_tag = None
             print("WARNING: Operation with no inputs:", self)
         else:
             loop_tag = self.inputs[0].get_loop_tag()
-            for node in inputs:
+            for node in self.inputs:
                 assert node.get_loop_tag() is loop_tag, "All inputs to the same \
                         Operation must be members of the same loop"
 
