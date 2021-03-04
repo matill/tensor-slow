@@ -131,7 +131,7 @@ class Operation(Tensor):
                 assert node.get_loop_tag() is loop_tag, "All inputs to the same \
                         Operation must be members of the same loop"
 
-        # Notify the EnterLoop of the new node that was added
+        # Notify the Loop of the new node that was added
         self.loop_tag = loop_tag
         if self.loop_tag is not None:
             self.loop_tag.add_operation(self)

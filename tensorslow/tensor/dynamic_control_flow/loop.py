@@ -97,23 +97,24 @@ from tensorslow.tensor.core import Tensor, Operation
     # d: Add shadow-dependencies to EndLoop. This must be contained in the loop.
 
 
-class EnterLoop(Operation):
-    """Does not really have Operation semantics at all????"""
-
+class Loop(Operation):
     def __init__(self):
         super().__init__([], None, find_loop_tag=False)
-        self.loop_tag = self
         self.loop_input_map = {}
         self.loop_inputs = set()
         self.rec_rels = set()
+        self.rec_rel_outs = []
         self.operations = set()
-        self.end_loop = None
+        self.loop_end_condition = None
+        self.loop_outputs = {}
+        self.shadow_dependencies = set()
+        self.is_activated = False
 
         # Mark this as False since it's determined by the RecurrenceRelation
         # and LoopInput nodes that are added at a later point.
         # This variable can be set to None at a later stage but we need a way
         # to distinguish between "not set" and "None".
-        self.outer_loop_tag = False
+        self.loop_tag = False
 
     def input(self, source):
         # If already created return the old LoopInput
@@ -121,46 +122,143 @@ class EnterLoop(Operation):
             return self.loop_input_map[source]
 
         # Create, store, and return a new LoopInput for the given source
-        self.set_outer_loop_tag(source.get_loop_tag())
+        self._set_loop_tag(source.get_loop_tag())
         loop_input = LoopInput(self, source)
         self.loop_inputs.add(loop_input)
         self.loop_input_map[source] = loop_input
         return loop_input
 
     def recurrence_relation(self, initial_source):
-        assert self.end_loop is None, "ERROR: Added a RecurrenceRelation to a loop \
-                that has already defined the fixed set of recurrence relations."
-
         # Create, store, and return a new RecurrenceRelation for the given source
-        self.set_outer_loop_tag(initial_source.get_loop_tag())
+        self._set_loop_tag(initial_source.get_loop_tag())
         rec_rel = RecurrenceRelation(initial_source, self)
         self.rec_rels.add(rec_rel)
         return rec_rel
 
+    def output(self, source):
+        assert source.get_loop_tag() is self, "Loop.output expects " +\
+                            "'source' to be a node within the loop."
+
+        if not source in self.loop_outputs:
+            output = LoopOutput(source, self)
+            self.loop_outputs[source] = output
+            return output
+        else:
+            return self.loop_outputs[source]
+
+    def set_ending_condition(self, condition):
+        self.loop_end_condition = condition
+        assert condition.get_loop_tag() is self, "A loop's ending condition must " +\
+                                                        "be a member of the loop."
+
+    def add_shadow_dependency(self, node):
+        self.shadow_dependencies.add(node)
+        assert node.get_loop_tag() is self, "Loop cannot have a shadow-dependency " +\
+                                            "that is contained in another loop."
+
     def add_operation(self, node):
         self.operations.add(node)
 
-    def set_outer_loop_tag(self, tag):
-        if self.outer_loop_tag == False:
-            self.outer_loop_tag = tag
+    def _set_loop_tag(self, tag):
+        if self.loop_tag == False:
+            self.loop_tag = tag
         else:
-            assert self.outer_loop_tag == tag, "All inputs to a loop must come \
+            assert self.loop_tag == tag, "All inputs to a loop must come \
                                                 from the same outer loop."
 
-    def set_end_loop(self, end_loop):
-        assert type(end_loop) is EndLoop
-        assert self.end_loop is None, "EnterLoop object already has a corresponding EndLoop object"
-        self.end_loop = end_loop
+    def _assert_has_all_recrel_nexts(self):
+        # Make sure the entire set of rec_rel_outs is known.
+        if len(self.rec_rels) > len(self.rec_rel_outs):
+            self.rec_rel_outs = [
+                rec_rel.rec_rel_out
+                for rec_rel in self.rec_rels
+                if rec_rel.rec_rel_out is not None
+            ]
 
-    def activate(self, context):
-        context[self] = 'ACTIVATED'
+        assert len(self.rec_rels) == len(self.rec_rel_outs), "Tried to evaluate " +\
+                "loop before all recurrence relations have been given a source " +\
+                "node to compute their value in the next iteration."
 
-    def deactivate(self, context):
-        del context[self]
+    def _assert_has_loop_end_condition(self):
+        assert self.loop_end_condition is not None, "Tried to evaluate loop " +\
+                                "before it was given a loop end condition."
 
-    def evaluate(self, context):
-        assert context[self] == 'ACTIVATED', "A node within a loop was evaluated \
-                    directly by a user without going through a LoopOutput node"
+    def _assert_activated(self):
+        assert self.is_activated
+
+    def _activate(self):
+        self.is_activated = True
+
+    def _deactivate(self):
+        self.is_activated = False
+
+    def _clear_context_cache(self, context, nodes):
+        for node in nodes:
+            if node in context:
+                del context[node]
+
+    def compute(self, context):
+        """
+        Returns a dictionary where:
+            key: An element in self.outputs
+            value: The value returned by the element in self.outputs
+        """
+
+        self._assert_has_all_recrel_nexts()
+        self._assert_has_loop_end_condition()
+
+        # "Activate" the loop to signalize that the nodes within the loop are
+        # evaluated through the Loop node.
+        self._activate()
+
+        loop_nodes = self.operations
+        rec_rels = self.rec_rels
+        while True:
+            do_new_iteration = self.loop_end_condition.evaluate(context)
+            if do_new_iteration:
+
+                # Compute the next value for the recurrence relations
+                # Store results as (RecRelOut, val) tuples
+                next_vals = []
+                for rec_rel in rec_rels:
+                    val = rec_rel.rec_rel_out.evaluate(context)
+                    next_vals.append((rec_rel, val))
+
+                # Execute shadow dependencies
+                for node in self.shadow_dependencies:
+                    node.evaluate(context)
+
+                # Clear cached computations within the loop
+                self._clear_context_cache(context, loop_nodes)
+                self._clear_context_cache(context, self.rec_rel_outs)
+
+                # Set the new state of recurrence relations
+                for rec_rel, val in next_vals:
+                    rec_rel.update(context, val)
+
+            else:
+                # Evaluate the nodes that are returned from the loop
+                loop_outputs = {
+                    loop_output: source.evaluate(context) \
+                    for (source, loop_output) in self.loop_outputs.items()
+                }
+
+                # Clean up internal state and cached computations in the loop
+                # that are no longer useful.
+                node_lists = [
+                    loop_nodes,
+                    rec_rels,
+                    self.loop_inputs,
+                ]
+
+                for node_set in node_lists:
+                    self._clear_context_cache(context, node_set)
+
+                # "Deactivate" the loop
+                self._deactivate()
+
+                # Return results
+                return loop_outputs
 
 
 class RecurrenceRelation(Operation):
@@ -169,14 +267,14 @@ class RecurrenceRelation(Operation):
     and gets a new value for each iteration.
     """
 
-    def __init__(self, initial, enter_loop):
+    def __init__(self, initial, loop):
         super().__init__([initial], initial.shape, find_loop_tag=False)
-        self.loop_tag = enter_loop
+        self.loop_tag = loop
         self.rec_rel_out = None
         self.initial = initial
-        assert type(enter_loop) is EnterLoop, f"Expected enter_loop to be of type " + \
-                                                f"EnterLoop. Got {type(enter_loop)}"
-        self.enter_loop = enter_loop
+        assert type(loop) is Loop, f"Expected loop to be of type " + \
+                                    f"Loop. Got {type(loop)}"
+        self.loop = loop
 
     def next_iteration(self, source):
         assert self.rec_rel_out is None, "RecurrenceRelation's next_iteration " +\
@@ -186,13 +284,12 @@ class RecurrenceRelation(Operation):
                 "to be a node within the same loop as the RecurrenceRelation node"
 
         self.rec_rel_out = RecurrenceRelationOut(self, source)
-        return self.rec_rel_out
 
     def update(self, context, value):
         context[self] = value
 
     def compute(self, context):
-        self.enter_loop.evaluate(context)
+        self.loop._assert_activated()
         return self.initial.evaluate(context)
 
 
@@ -222,14 +319,14 @@ class LoopInput(Operation):
     operation is not re-evaluated at each operation.
     """
 
-    def __init__(self, enter_loop, source):
+    def __init__(self, loop, source):
         super().__init__([source], source.shape, find_loop_tag=False)
-        self.loop_tag = enter_loop
+        self.loop_tag = loop
         self.source = source
-        self.enter_loop = enter_loop
+        self.loop = loop
 
     def compute(self, context):
-        self.enter_loop.evaluate(context)
+        self.loop._assert_activated()
         return self.source.evaluate(context)
 
 
@@ -248,125 +345,21 @@ class LoopOutput(Operation):
     # LoopOutput objects are not meant to be tagged as loop members (unless nested), since
     # that would make Operations that use a LoopOutput as input "believe" they are also
     # part of the loop.
-    def __init__(self, source, end_loop):
+    def __init__(self, source, loop):
         """
         source: A node within the loop. The LoopOutput returns the same value as source.
         """
 
         super().__init__([source], source.shape, find_loop_tag=False)
-        self.loop_tag = end_loop.loop_tag
         self.source = source
-        self.end_loop = end_loop
+        self.loop = loop
+        self.loop_tag = loop.loop_tag
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
         print("TODO: Make this function check that the dependent node is not in the same loop.")
 
     def compute(self, context):
-        outputs = self.end_loop.evaluate(context)
+        outputs = self.loop.evaluate(context)
         return outputs[self]
-
-
-class EndLoop(Operation):
-    def __init__(self, enter_loop, rec_rel_outs, loop_end_condition):
-        """
-        enter_loop: The EnterLoop object that starts the loop.
-        rec_rel_outs: A list of RecurrenceRelationOut objects that belong in the loop
-        loop_end_condition: A BooleanOperation that tells if the loop
-        should end or not.
-        """
-
-        # Check that everything corresponds to the right loop.
-        assert loop_end_condition.get_loop_tag() is enter_loop
-        for node in rec_rel_outs:
-            assert node.get_loop_tag() is enter_loop
-
-        # Initialize
-        super().__init__([], None, find_loop_tag=False)
-        self.loop_tag = enter_loop.outer_loop_tag
-        self.enter_loop = enter_loop
-        enter_loop.set_end_loop(self)
-        self.loop_end_condition = loop_end_condition
-        self.rec_rel_outs = rec_rel_outs
-        self.shadow_dependencies = set()
-        self.loop_outputs = {}
-
-    def output(self, source):
-        assert source.get_loop_tag() is self.enter_loop, "EndLoop.output exects " +\
-                                            "'source' to be a node within the loop."
-
-        if not source in self.loop_outputs:
-            self.loop_outputs[source] = LoopOutput(source, self)
-
-        return self.loop_outputs[source]
-
-    def add_shadow_dependency(self, node):
-        self.shadow_dependencies.add(node)
-        assert node.get_loop_tag() is self.enter_loop, "EndLoop cannot depend on a node \
-                                                that is contained in another loop."
-
-    def _clear_context_cache(self, context, nodes):
-        for node in nodes:
-            if node in context:
-                del context[node]
-
-    def compute(self, context):
-        """
-        Returns a dictionary where:
-            key: An element in self.outputs
-            value: The value returned by the element in self.outputs
-        """
-
-        # "Activate" the loop to signalize that the nodes within the loop are
-        # evaluated through the EnterLoop node.
-        self.enter_loop.activate(context)
-
-        loop_nodes = self.enter_loop.operations
-        rec_rel_outs = self.rec_rel_outs
-        while True:
-            do_new_iteration = self.loop_end_condition.evaluate(context)
-            if do_new_iteration:
-
-                # Compute the next value for the recurrence relations
-                # Store results as (RecRelOut, val) tuples
-                next_vals = []
-                for rec_rel_out in rec_rel_outs:
-                    val = rec_rel_out.evaluate(context)
-                    next_vals.append((rec_rel_out, val))
-
-                # Execute shadow dependencies
-                for node in self.shadow_dependencies:
-                    node.evaluate(context)
-
-                # Clear cached computations within the loop
-                self._clear_context_cache(context, loop_nodes)
-                self._clear_context_cache(context, rec_rel_outs)
-
-                # Set the new state of recurrence relations
-                for rec_rel_out, val in next_vals:
-                    rec_rel_out.rec_rel.update(context, val)
-
-            else:
-                # Evaluate the nodes that are returned from the loop
-                loop_outputs = {
-                    loop_output: source.evaluate(context) \
-                    for (source, loop_output) in self.loop_outputs.items()
-                }
-
-                # Clean up internal state and cached computations in the loop
-                # that are no longer useful.
-                node_lists = [
-                    loop_nodes,
-                    self.enter_loop.rec_rels,
-                    self.enter_loop.loop_inputs,
-                ]
-
-                for node_set in node_lists:
-                    self._clear_context_cache(context, node_set)
-
-                # "Deactivate" the loop
-                self.enter_loop.deactivate(context)
-
-                # Return results
-                return loop_outputs
 
