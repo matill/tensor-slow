@@ -156,7 +156,7 @@ class Loop(Operation):
         assert node.get_loop_tag() is self, "Loop cannot have a shadow-dependency " +\
                                             "that is contained in another loop."
 
-    def add_operation(self, node):
+    def _add_operation(self, node):
         self.operations.add(node)
 
     def _set_loop_tag(self, tag):
@@ -234,7 +234,7 @@ class Loop(Operation):
 
                 # Set the new state of recurrence relations
                 for rec_rel, val in next_vals:
-                    rec_rel.update(context, val)
+                    rec_rel._update(context, val)
 
             else:
                 # Evaluate the nodes that are returned from the loop
@@ -285,7 +285,7 @@ class RecurrenceRelation(Operation):
 
         self.rec_rel_out = RecurrenceRelationOut(self, source)
 
-    def update(self, context, value):
+    def _update(self, context, value):
         context[self] = value
 
     def compute(self, context):

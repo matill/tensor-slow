@@ -134,7 +134,7 @@ class Operation(Tensor):
         # Notify the Loop of the new node that was added
         self.loop_tag = loop_tag
         if self.loop_tag is not None:
-            self.loop_tag.add_operation(self)
+            self.loop_tag._add_operation(self)
 
     def get_directly_related_nodes(self):
         """Returns all nodes that depend on this node, and the ones this node depends on"""
