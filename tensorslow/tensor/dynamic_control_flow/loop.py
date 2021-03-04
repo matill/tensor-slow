@@ -3,98 +3,20 @@ import numpy as np
 from tensorslow.tensor.core import Tensor, Operation
 
 
-
 # New things to support:
-# Remove NextIteration
-# Add RecRelNew
-# Add new LoopOutputs to a loop after EndLoop is defined
-# Add new LoopInputs to a loop after EndLoop is defined
-# A way to add shadow dependencies to LoopEnd after LoopEnd is defined
 # A way to replace dependencies to a node?
 # Get gradient through specific paths?
-# Normal nodes with inputs that are in a loop should automatically be flagged
-#   as a loop member, and the EndLoop should add them (and all their dependencies)
-#   to the set of members (and tag all their dependencies).
-# Normal nodes with input from two different loops should raise an exception.
-# LoopOut and LoopEnd nodes should not be flagged as loop members, unless nested.
-# LoopInput and RecRel nodes should or should be flagged to make it simple
-#   for the nodes that depend on them to flag temselves as loop members.
-# RecRelOut nodes should or should not be flagged???? I dont think it matters
-#   No nodes depend on RecRelOut nodes, so they can only be found in the inverse
-#   -dependency search. Here it can be useful for them to be tagged.
-# "Hide" methods that are not meant to be globally available
-# More intuitive/ easy to use scripting interface
 
-# LoopTagged: LoopInput, RecRel, and RecRelOut should be flagged as members of the same loop
-# Not tagged: LoopOut and EndLoop should not be tagged, but if they are nested
-#             then they should be tagged by the outer loop.
-#             They should be able to notice the membership to a nested loop if the input to
-#             LoopInput or RecRel belongs to another loop. In that case they should all
-#             belong to the same outer loop.
-# EnterLoop: This is the looptag itself?
 
-# Making loop tags convenient:
-# Operations get their loop tag from their parent.
-# Tensors without inputs (not operations, but constants, variables and queues)
-#   are not allowed in loops, and can therefore have a hard coded "None" tag.
-# Therefore we have an easily enforced scheme where LoopInput and RecRel
-#   operations get their loop-tag as a parameter, and all "normal" operations
-#   in the loop "inherit" their loop-tag from all parents (where all of them
-#   need to have the same tag).
-# Since all "normal" operations/nodes in the loop have a loop-tag it is easy
-#   for LoopOutput and RecRelOut nodes to check that a node is a member of 
-#   the loop, and it's also simple for EndLoop to check that the condition
-#   node is a member of the loop.
-
-# The different loop operations and their loop tags.
-# EnterLoop: Get the outer loop tag from RecRel nodes.
-# RecurrenceRelation and LoopInput: The corresponding EnterLoop, so dependent nodes
+# The different operations and their loop tags.
+# Loop: A loop's loop_tag is the loop it's nested in. Not itself
+# LoopOutput: Same as the loop. This is because "normal" operations that use a
+#   LoopOutput as input inherits its' loop_tag.
+# RecurrenceRelation and LoopInput: The corresponding loop they provide into to,
+#   since all "normal" nodes within the loop inherit their loop tags.
 #   can easily inherit it.
-# RecurrenceRelationOut: Don't care?
-# EndLoop: Don't really care, but use the outer loop.
-# LoopOutput: The tag of the outer loop, so dependent nodes can easily inherit it.
-
-# Additional notes:
-# LoopOutput nodes can find their loop tag by checking RecRel/EndLoop nodes.
-# RecRel nodes should all have the same "outer-loop-tag".
-#   Enforce this by setting EnterLoop's outer loop tag when the first
-#   RecRel is initialized, and make sure the others have the same.
-# 
-
-
-
-# Workflow:
-# 1. Create all RecRel objects
-# 2. Create EnterLoop object
-# 3:
-#   a: Create all RecRelNew objects
-#   c: Create loop end condition (BooleanOperation)
-#   d: Create some LoopInput objects.
-# 4: Create EndLoop (Check dependencies of all RecRelNews, 
-    # and the loop-end-condition:
-        # * They should be flagged to be contained in THIS loop.
-        # * Inverse dependencies also need to be flagged to be contained in the loop.
-        # * Terminate the dependency search at RecRel and LoopInput nodes.
-        # * When the dependency search finds LoopOut nodes it should continue searching
-        #   through the corresponding RecRel and LoopIn nodes.
-        # * Terminate the inverse dependency search at RecRelOut, LoopOut.
-        # * When the inverse-dependency search finds LoopIn or RecRel nodes it should
-        #   continue searching throgh the corresponding LoopOut nodes.
-        # * All RecRel nodes should have a single corresponding RecRelNew object,
-        #   and that RecRelNew SHOULD BE provided to the LoopEnd.
-        # * Only Operation and Constant nodes are allowed in the loop 
-        #   (no Variable, Queue, or Input nodes.)
-        # * The provided RecRelNews' corresponsing RecRels' should have the right EnterLoop (both ways)
-# 5 (optional, repeated):
-    # a: Add new LoopOutput to the LoopEnd:
-        # * Check this LoopOutput's dependencies as described above
-    # b: Add a new LoopInput to the loop.
-    # c: Add a new "withinin-loop" node to the loop.
-        # * This node needs to be aware of it's membership in the node
-        #   without the user manually making it happen (through dependencies)
-        # * Either all it's dependencies belong to the loop, or none of them do.
-        # * Its inputs must be an Operation sub-class or Constant.
-    # d: Add shadow-dependencies to EndLoop. This must be contained in the loop.
+# RecurrenceRelationOut: The tag of their corresponding loop. Exactly what tag
+#   they get isn't really that important.
 
 
 class Loop(Operation):
@@ -338,13 +260,6 @@ class LoopOutput(Operation):
     access it through the LoopOutput operation to not be included in the loop.
     """
 
-    # TODO: THis and EndLoop should make sure to not mark themselves as loop members
-    # This one needs super().__init__(inputs, shape), which notifies the source
-    # node that it depends on this one. However, this results in calling
-    # self.notify_loop_membership with the source's loop-tag, which we don't want since
-    # LoopOutput objects are not meant to be tagged as loop members (unless nested), since
-    # that would make Operations that use a LoopOutput as input "believe" they are also
-    # part of the loop.
     def __init__(self, source, loop):
         """
         source: A node within the loop. The LoopOutput returns the same value as source.
