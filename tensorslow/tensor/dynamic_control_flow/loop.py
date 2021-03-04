@@ -84,6 +84,8 @@ class Loop(Operation):
     def _set_loop_tag(self, tag):
         if self.loop_tag == False:
             self.loop_tag = tag
+            if self.loop_tag is not None:
+                self.loop_tag._add_operation(self)
         else:
             assert self.loop_tag == tag, "All inputs to a loop must come \
                                                 from the same outer loop."
@@ -269,6 +271,8 @@ class LoopOutput(Operation):
         self.source = source
         self.loop = loop
         self.loop_tag = loop.loop_tag
+        if self.loop_tag is not None:
+            self.loop_tag._add_operation(self)
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
