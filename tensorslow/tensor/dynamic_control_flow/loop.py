@@ -22,6 +22,7 @@ from tensorslow.tensor.core import Tensor, Operation
 # RecRelOut nodes should or should not be flagged???? I dont think it matters
 #   No nodes depend on RecRelOut nodes, so they can only be found in the inverse
 #   -dependency search. Here it can be useful for them to be tagged.
+# "Hide" methods that are not meant to be globally available
 
 # LoopTagged: LoopInput, RecRel, and RecRelOut should be flagged as members of the same loop
 # Not tagged: LoopOut and EndLoop should not be tagged, but if they are nested
@@ -138,11 +139,15 @@ class EnterLoop(Operation):
         assert self.loop_end is None, "EnterLoop object already has a corresponding LoopEnd object"
         self.loop_end = loop_end
 
-    def compute(self, context):
-        # If this function is called it means the EnterLoop object was not "activated"
-        # in the context, which means a node in the loop's "evaluate" function
-        # was called directly, and not through a LoopOutput node.
-        assert False
+    def activate(self, context):
+        context[self] = 'ACTIVATED'
+
+    def deactivate(self, context):
+        del context[self]
+
+    def evaluate(self, context):
+        assert context[self] == 'ACTIVATED', "A node within a loop was evaluated \
+                    directly by a user without going through a LoopOutput node"
 
 
 class RecurrenceRelation(Operation):
@@ -265,109 +270,31 @@ class EndLoop(Operation):
         loop_end_condition: A BooleanOperation that tells if the loop
         should end or not.
         """
+
         # Check that everything corresponds to the right loop.
         assert loop_end_condition.loop_tag is enter_loop
         for node in rec_rel_outs:
             assert node.loop_tag is enter_loop
 
-        # 
+        # Initialize
         super().__init__([], None, find_loop_tag=False)
         self.loop_tag = enter_loop.outer_loop_tag
         self.enter_loop = enter_loop
         enter_loop.set_loop_end(self)
         self.loop_end_condition = loop_end_condition
-        self.outputs = outputs
-
-        # Search for all nodes in the loop
-        all_loop_nodes = self.find_loop_nodes()
-
-        # Split set of nodes into groups that are handled differently
-        self.loop_inputs = {x for x in all_loop_nodes if isinstance(x, LoopInput)}
-        self.recurrences = {x for x in all_loop_nodes if isinstance(x, RecurrenceRelation)}
-        self.loop_nodes = (all_loop_nodes - self.loop_inputs) - self.recurrences
-
-        # Assert correctnes of the recurrences and loop_inputs sets
-        assert self.recurrences == self.enter_loop.recurrence_relations, \
-            "ERROR: ExitLoop was not able to find the same set of recurrence relation \
-            objects that are registered in the EnterLoop object."
-
-        assert self.loop_inputs == self.enter_loop.loop_inputs, \
-            "ERROR: ExitLoop was not able to find the same set of loop inputs \
-            objects that are registered in the EnterLoop object."
+        self.rec_rel_outs = rec_rel_outs
+        self.shadow_dependencies = set()
+        self.loop_outputs = []
 
     def add_loop_output(self, loop_output):
-        raise NotImplementedError
+        self.loop_outputs.append(loop_output)
 
-    def find_loop_nodes(self):
-        """
-        Searches through all nodes that are input to this ExitLoop operation, or
-        to the NextIteration operation, and the loop-end-condition operation.
-        These nodes are used to clear the cached internal state of the loop between
-        iterations to make sure that operations are re-computed with the new
-        input that is provided by recurrence relations or new output from
-        stateful operations (Eg. FIFO-Queues or variables that have been updated).
-        """
+    def add_shadow_dependency(self, node):
+        self.shadow_dependencies.add(node)
+        assert node.loop_tag is self.enter_loop, "EndLoop cannot depend on a node \
+                                                that is contained in another loop."
 
-        # The set of nodes in the loop are added to this set
-        settled_nodes = set()
-
-        # A temporary set containing nodes in the loop.
-        # Nodes are moved from this set to settled_nodes
-        # when their parent/input nodes are added to unsettled_nodes.
-        unsettled_nodes = [x for x in self.inputs]
-        unsettled_nodes += self.next_iteration.inputs
-        unsettled_nodes.append(self.loop_end_condition)
-        unsettled_nodes = set(unsettled_nodes)
-
-        while len(unsettled_nodes) > 0:
-            next_unsettled = set()
-            for node in unsettled_nodes:
-
-                # Check if the node's parents/inputs should be added to the set.
-                # Eg. The LoopInput and RecurrenceRelation operations are the interface
-                # from the outside to the inside of the loop, so their parents do not
-                # belong in this set.
-                # Similarly, it can find the ExitLoop operation of a nested loop. While
-                # the outputs of the nested loop (which are the inputs to the nested
-                # ExitLoop operation) are part of this (outer) loop, the nested
-                # loop is responsible for cleaning up its own internal state,
-                # so these nodes are not added to the set.
-                if isinstance(node, RecurrenceRelation):
-                    # TODO: Assert that it belongs to the right loop.
-                    check_parents = False
-                elif isinstance(node, LoopInput):
-                    check_parents = False
-                elif isinstance(node, EnterLoop):
-                    assert False, "WARNING: Nodes cannot have EnterLoop as input"
-                elif isinstance(node, NextIteration):
-                    assert False, "WARNING: Nodes cannot have NextIteration as input"
-                elif isinstance(node, ExitLoop):
-                    check_parents = False
-                elif isinstance(node, LoopOutput):
-                    check_parents = True
-                elif isinstance(node, Operation):
-                    check_parents = True
-                elif isinstance(node, Tensor):
-                    check_parents = False
-                else:
-                    assert False, f"ExitLoop: Found node in loop-graph that is is not" \
-                            + " a tensor subclass: {node}"
-
-                # Add this node to the set of settled nodes, and add its parents/
-                # inputs to the new set of nodes to search.
-                settled_nodes.add(node)
-                if check_parents:
-                    next_unsettled |= set(node.inputs)
-
-            # Initialize the next iteration by updating unsettled_nodes.
-            # The nested loop above may add nodes to next_unsettled that
-            # may already be in settled_nodes, so no need to repeat the
-            # procedure for those.
-            unsettled_nodes = next_unsettled - settled_nodes
-
-        return settled_nodes
-
-    def clear_context_cache(self, context, nodes):
+    def _clear_context_cache(self, context, nodes):
         for node in nodes:
             if node in context:
                 del context[node]
@@ -378,32 +305,54 @@ class EndLoop(Operation):
             key: An element in self.outputs
             value: The value returned by the element in self.outputs
         """
+
+        # "Activate" the loop to signalize that the nodes within the loop are
+        # evaluated through the EnterLoop node.
+        self.enter_loop.activate(context)
+
+        loop_nodes = self.enter_loop.operations
         while True:
             do_new_iteration = self.loop_end_condition.evaluate(context)
             if do_new_iteration:
-                # Compute the input to the next iteration
-                new_input_vals = self.next_iteration.evaluate(context)
+
+                # Compute the next value for the recurrence relations
+                # Store results as (RecRelOut, val) tuples
+                next_vals = []
+                for rec_rel_out in self.rec_rel_outs:
+                    val = rec_rel_out.evaluate(context)
+                    next_vals.append((rec_rel_out, val))
+
+                # Execute shadow dependencies
+                for node in self.shadow_dependencies:
+                    node.evaluate(context)
 
                 # Clear cached computations within the loop
-                self.clear_context_cache(context, self.loop_nodes)
-                self.clear_context_cache(context, [self.next_iteration])
+                self._clear_context_cache(context, loop_nodes)
+                self._clear_context_cache(context, [self.next_iteration])
 
                 # Set the new state of recurrence relations
-                for node, val in new_input_vals.items():
-                    node.update(context, val)
+                for rec_rel_out, val in next_vals:
+                    rec_rel_out.rec_rel.update(context, val)
 
             else:
                 # Evaluate the nodes that are returned from the loop
                 loop_outputs = {
-                    node: node.evaluate(context) for node in self.outputs
+                    node: node.evaluate(context) for node in self.loop_outputs
                 }
 
                 # Clean up internal state and cached computations in the loop
                 # that are no longer useful.
-                # (loop-inputs, recurrence relations and internal operations, EnterLoop)
-                for node_set in [self.loop_nodes, self.recurrences, \
-                                self.loop_inputs, [self.enter_loop]]:
-                    self.clear_context_cache(context, node_set)
+                node_lists = [
+                    loop_nodes,
+                    self.enter_loop.rec_rels,
+                    self.enter_loop.loop_inputs,
+                ]
+
+                for node_set in node_lists:
+                    self._clear_context_cache(context, node_set)
+
+                # "Deactivate" the loop
+                self.enter_loop.deactivate(context)
 
                 # Return results
                 return loop_outputs
