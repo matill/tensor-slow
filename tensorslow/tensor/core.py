@@ -19,6 +19,9 @@ class Tensor:
     def add_dependent_node(self, node):
         self.direct_dependent_nodes.append(node)
 
+    def get_loop_tag(self):
+        return None
+
     def recursively_add_nodes_to_set(self, node_set):
         """Adds this node to the set, and recursively adds all other nodes in the graph to the set"""
         if self in node_set:
@@ -103,13 +106,35 @@ class Tensor:
 class Operation(Tensor):
     """Abstract base class for operations in a graph that are evaluated using other input Tensors"""
 
-    def __init__(self, inputs, shape):
+    def __init__(self, inputs, shape, find_loop_tag=True):
         super().__init__(shape)
         self.inputs = inputs
+
+        if find_loop_tag:
+            self.find_loop_tag_from_inputs()
 
         # Let the input nodes to know that this node depends on them as input
         for node in inputs:
             node.add_dependent_node(self)
+
+    def get_loop_tag(self):
+        return self.loop_tag
+
+    def find_loop_tag_from_inputs(self):
+        # Find the loop tags of the inputs and make sure they all have the same
+        if len(inputs) == 0:
+            loop_tag = None
+            print("WARNING: Operation with no inputs:", self)
+        else:
+            loop_tag = self.inputs[0].get_loop_tag()
+            for node in inputs:
+                assert node.get_loop_tag() is loop_tag, "All inputs to the same \
+                        Operation must be members of the same loop"
+
+        # Notify the EnterLoop of the new node that was added
+        self.loop_tag = loop_tag
+        if self.loop_tag is not None:
+            self.loop_tag.add_operation(self)
 
     def get_directly_related_nodes(self):
         """Returns all nodes that depend on this node, and the ones this node depends on"""

@@ -21,7 +21,43 @@ from tensorslow.tensor.core import Tensor, Operation
 #   for the nodes that depend on them to flag temselves as loop members.
 # RecRelOut nodes should or should not be flagged???? I dont think it matters
 #   No nodes depend on RecRelOut nodes, so they can only be found in the inverse
-#   -dependency search. Here it can be usefull for them to be tagged.
+#   -dependency search. Here it can be useful for them to be tagged.
+
+# LoopTagged: LoopInput, RecRel, and RecRelOut should be flagged as members of the same loop
+# Not tagged: LoopOut and EndLoop should not be tagged, but if they are nested
+#             then they should be tagged by the outer loop.
+#             They should be able to notice the membership to a nested loop if the input to
+#             LoopInput or RecRel belongs to another loop. In that case they should all
+#             belong to the same outer loop.
+# EnterLoop: This is the looptag itself?
+
+# Making loop tags convenient:
+# Operations get their loop tag from their parent.
+# Tensors without inputs (not operations, but constants, variables and queues)
+#   are not allowed in loops, and can therefore have a hard coded "None" tag.
+# Therefore we have an easily enforced scheme where LoopInput and RecRel
+#   operations get their loop-tag as a parameter, and all "normal" operations
+#   in the loop "inherit" their loop-tag from all parents (where all of them
+#   need to have the same tag).
+# Since all "normal" operations/nodes in the loop have a loop-tag it is easy
+#   for LoopOutput and RecRelOut nodes to check that a node is a member of 
+#   the loop, and it's also simple for EndLoop to check that the condition
+#   node is a member of the loop.
+
+# The different loop operations and their loop tags.
+# EnterLoop: Get the outer loop tag from RecRel nodes.
+# RecurrenceRelation and LoopInput: The corresponding EnterLoop, so dependent nodes
+#   can easily inherit it.
+# RecurrenceRelationOut: Don't care?
+# EndLoop: Don't really care, but use the outer loop.
+# LoopOutput: The tag of the outer loop, so dependent nodes can easily inherit it.
+
+# Additional notes:
+# LoopOutput nodes can find their loop tag by checking RecRel/EndLoop nodes.
+# RecRel nodes should all have the same "outer-loop-tag".
+#   Enforce this by setting EnterLoop's outer loop tag when the first
+#   RecRel is initialized, and make sure the others have the same.
+# 
 
 
 
@@ -63,9 +99,11 @@ class EnterLoop(Operation):
     """Does not really have Operation semantics at all????"""
 
     def __init__(self):
-        super().__init__([], None)
+        super().__init__([], None, find_loop_tag=False)
+        self.loop_tag = self
         self.loop_inputs = set()
         self.rec_rels = set()
+        self.operations = set()
         self.loop_end = None
 
     def add_loop_input(self, node):
@@ -78,6 +116,21 @@ class EnterLoop(Operation):
                 that has already defined the fixed set of recurrence relations."
 
         self.rec_rels.add(node)
+
+        # Add the loop_tag
+        self.set_loop_tag(node.loop_tag)
+
+    def add_operation(self, node):
+        self.operations.add(node)
+
+    def set_loop_tag(self, loop_tag):
+        # If this is the first time the function is called, allow it.
+        # If not, make sure this is the same loop_tag as used every other time
+        if len(self.rec_rels) + len(self.loop_inputs) == 1:
+            self.loop_tag = node.loop_tag
+        else:
+            assert self.loop_tag == node.loop_tag, "All inputs to a loop must come \
+                    from the same outer loop."
 
     def set_loop_end(self, loop_end):
         assert type(loop_end) is LoopEnd
@@ -98,7 +151,8 @@ class RecurrenceRelation(Operation):
     """
 
     def __init__(self, initial, enter_loop):
-        super().__init__([initial], initial.shape)
+        super().__init__([initial], initial.shape, find_loop_tag=False)
+        self.loop_tag = enter_loop
         self.rec_rel_out = None
         self.initial = initial
         assert type(enter_loop) is EnterLoop, "Expected enter_loop to be of type EnterLoop"
@@ -151,7 +205,8 @@ class LoopInput(Operation):
     """
 
     def __init__(self, enter_loop, source):
-        super().__init__([source], source.shape)
+        super().__init__([source], source.shape, find_loop_tag=False)
+        self.loop_tag = enter_loop
         self.enter_loop = enter_loop
         self.enter_loop.add_loop_input(self)
         self.source = source
@@ -169,12 +224,20 @@ class LoopOutput(Operation):
     access it through the LoopOutput operation to not be included in the loop.
     """
 
+    # TODO: THis and EndLoop should make sure to not mark themselves as loop members
+    # This one needs super().__init__(inputs, shape), which notifies the source
+    # node that it depends on this one. However, this results in calling
+    # self.notify_loop_membership with the source's loop-tag, which we don't want since
+    # LoopOutput objects are not meant to be tagged as loop members (unless nested), since
+    # that would make Operations that use a LoopOutput as input "believe" they are also
+    # part of the loop.
     def __init__(self, source, exit_loop):
         """
         source: A node within the loop. The LoopOutput returns the same value as source.
         """
 
-        super().__init__([source], source.shape)
+        super().__init__([source], source.shape, find_loop_tag=False)
+        self.loop_tag = self.exit_loop.loop_tag
         self.source = source
         self.exit_loop = exit_loop
         exit_loop.add_loop_output(self)
@@ -197,9 +260,10 @@ class EndLoop(Operation):
         outputs: A list of nodes in the loop that this ExitLoop operation
         is able to output using a LoopOutput operation.
         """
-        super().__init__(outputs, None)
-        self.next_iteration = next_iteration
-        self.enter_loop = next_iteration.enter_loop
+        super().__init__([], None, find_loop_tag=False)
+        self.loop_tag = enter_loop.loop_tag
+        self.enter_loop = enter_loop
+        enter_loop.set_loop_end(self)
         self.loop_end_condition = loop_end_condition
         self.outputs = outputs
 
