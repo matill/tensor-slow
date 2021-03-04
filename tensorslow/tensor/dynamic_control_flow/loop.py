@@ -106,6 +106,12 @@ class EnterLoop(Operation):
         self.operations = set()
         self.loop_end = None
 
+        # Mark this as False since it's determined by the RecurrenceRelation
+        # and LoopInput nodes that are added at a later point.
+        # This variable can be set to None at a later stage but we need a way
+        # to distinguish between "not set" and "None".
+        self.outer_loop_tag = False
+
     def add_loop_input(self, node):
         assert type(loop_end) is LoopInput
         self.loop_inputs.add(node)
@@ -117,20 +123,15 @@ class EnterLoop(Operation):
 
         self.rec_rels.add(node)
 
-        # Add the loop_tag
-        self.set_loop_tag(node.loop_tag)
-
     def add_operation(self, node):
         self.operations.add(node)
 
-    def set_loop_tag(self, loop_tag):
-        # If this is the first time the function is called, allow it.
-        # If not, make sure this is the same loop_tag as used every other time
-        if len(self.rec_rels) + len(self.loop_inputs) == 1:
-            self.loop_tag = node.loop_tag
+    def set_outer_loop_tag(self, tag):
+        if self.outer_loop_tag == False:
+            self.outer_loop_tag = tag
         else:
-            assert self.loop_tag == node.loop_tag, "All inputs to a loop must come \
-                    from the same outer loop."
+            assert self.outer_loop_tag == tag, "All inputs to a loop must come \
+                                                from the same outer loop."
 
     def set_loop_end(self, loop_end):
         assert type(loop_end) is LoopEnd
@@ -158,6 +159,7 @@ class RecurrenceRelation(Operation):
         assert type(enter_loop) is EnterLoop, "Expected enter_loop to be of type EnterLoop"
         self.enter_loop = enter_loop
         enter_loop.add_rec_rel(self)
+        enter_loop.set_outer_loop_tag(initial.loop_tag)
 
     def set_rec_rel_out(self, rec_rel_out):
         assert type(rec_rel_out) is RecurrenceRelationOut, \
@@ -188,6 +190,9 @@ class RecurrenceRelationOut(Operation):
         self.source = source
         self.rec_rel = rec_rel
         rec_rel.set_rec_rel_out(self)
+        assert self.loop_tag is rec_rel.loop_tag, "RecurrenceRelationOut node was \
+                constructed where the source and the corresponding RecurrenceRelation \
+                node are members of different loops."
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
@@ -207,9 +212,10 @@ class LoopInput(Operation):
     def __init__(self, enter_loop, source):
         super().__init__([source], source.shape, find_loop_tag=False)
         self.loop_tag = enter_loop
-        self.enter_loop = enter_loop
-        self.enter_loop.add_loop_input(self)
         self.source = source
+        self.enter_loop = enter_loop
+        enter_loop.add_loop_input(self)
+        enter_loop.set_outer_loop_tag(source.loop_tag)
 
     def compute(self, context):
         self.enter_loop.evaluate(context)
@@ -252,16 +258,21 @@ class LoopOutput(Operation):
 
 
 class EndLoop(Operation):
-    def __init__(self, enter_loop, rec_rel_outs, loop_end_condition, loop_outputs):
+    def __init__(self, enter_loop, rec_rel_outs, loop_end_condition):
         """
-        next_iteration: The NextIteration operation in the same loop.
+        enter_loop: The EnterLoop object that starts the loop.
+        rec_rel_outs: A list of RecurrenceRelationOut objects that belong in the loop
         loop_end_condition: A BooleanOperation that tells if the loop
         should end or not.
-        outputs: A list of nodes in the loop that this ExitLoop operation
-        is able to output using a LoopOutput operation.
         """
+        # Check that everything corresponds to the right loop.
+        assert loop_end_condition.loop_tag is enter_loop
+        for node in rec_rel_outs:
+            assert node.loop_tag is enter_loop
+
+        # 
         super().__init__([], None, find_loop_tag=False)
-        self.loop_tag = enter_loop.loop_tag
+        self.loop_tag = enter_loop.outer_loop_tag
         self.enter_loop = enter_loop
         enter_loop.set_loop_end(self)
         self.loop_end_condition = loop_end_condition
