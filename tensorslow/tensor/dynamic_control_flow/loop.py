@@ -116,7 +116,7 @@ class EnterLoop(Operation):
         self.outer_loop_tag = False
 
     def input(self, source):
-        # If already created return the same LoopInput
+        # If already created return the old LoopInput
         if source in self.loop_input_map:
             return self.loop_input_map[source]
 
@@ -127,12 +127,15 @@ class EnterLoop(Operation):
         self.loop_input_map[source] = loop_input
         return loop_input
 
-    def add_rec_rel(self, node):
-        assert type(node) is RecurrenceRelation
+    def recurrence_relation(self, initial_source):
         assert self.end_loop is None, "ERROR: Added a RecurrenceRelation to a loop \
                 that has already defined the fixed set of recurrence relations."
 
-        self.rec_rels.add(node)
+        # Create, store, and return a new RecurrenceRelation for the given source
+        self.set_outer_loop_tag(initial_source.get_loop_tag())
+        rec_rel = RecurrenceRelation(initial_source, self)
+        self.rec_rels.add(rec_rel)
+        return rec_rel
 
     def add_operation(self, node):
         self.operations.add(node)
@@ -174,8 +177,6 @@ class RecurrenceRelation(Operation):
         assert type(enter_loop) is EnterLoop, f"Expected enter_loop to be of type " + \
                                                 f"EnterLoop. Got {type(enter_loop)}"
         self.enter_loop = enter_loop
-        enter_loop.add_rec_rel(self)
-        enter_loop.set_outer_loop_tag(initial.get_loop_tag())
 
     def set_rec_rel_out(self, rec_rel_out):
         assert type(rec_rel_out) is RecurrenceRelationOut, \
