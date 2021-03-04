@@ -178,15 +178,15 @@ class RecurrenceRelation(Operation):
                                                 f"EnterLoop. Got {type(enter_loop)}"
         self.enter_loop = enter_loop
 
-    def set_rec_rel_out(self, rec_rel_out):
-        assert type(rec_rel_out) is RecurrenceRelationOut, \
-                    "ERROR: RecurrenceRelation.set_rec_rel_out called with \
-                    argument that is not of RecurrenceRelationOut type"
+    def next_iteration(self, source):
+        assert self.rec_rel_out is None, "RecurrenceRelation's next_iteration " +\
+                                        "source has already been set"
 
-        assert self.rec_rel_out is None, "RecurrenceRelation object was  \
-                    added to more than one RecurrenceRelationOut object"
+        assert source.get_loop_tag() is self.get_loop_tag(), "Expected source " +\
+                "to be a node within the same loop as the RecurrenceRelation node"
 
-        self.rec_rel_out = rec_rel_out
+        self.rec_rel_out = RecurrenceRelationOut(self, source)
+        return self.rec_rel_out
 
     def update(self, context, value):
         context[self] = value
@@ -206,10 +206,6 @@ class RecurrenceRelationOut(Operation):
         super().__init__([source], source.shape)
         self.source = source
         self.rec_rel = rec_rel
-        rec_rel.set_rec_rel_out(self)
-        assert self.loop_tag is rec_rel.loop_tag, "RecurrenceRelationOut node was \
-                constructed where the source and the corresponding RecurrenceRelation \
-                node are members of different loops."
 
     def add_dependent_node(self, node):
         super().add_dependent_node(self, node)
