@@ -1,4 +1,4 @@
-from tensorslow.tensor.core import BackPropOperation
+from tensorslow.tensor.core import BackPropOperation, StaticMultiply
 
 
 class Subtract(BackPropOperation):
@@ -28,3 +28,4 @@ class Subtract(BackPropOperation):
             raise NotImplementedError
 
         return parents_gradient
+

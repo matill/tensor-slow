@@ -1,8 +1,8 @@
 import numpy as np
-from tensorslow.tensor.core import Operation
+from tensorslow.tensor.core import AssistedBackPropOperation
 
 
-class ElementwiseMultiply(Operation):
+class ElementwiseMultiply(AssistedBackPropOperation):
     """
     Returns a tensor of equal shape to the input, where elements at the same
     indexes are multiplied
@@ -40,3 +40,10 @@ class ElementwiseMultiply(Operation):
                 np.multiply(product, val, out=product)
 
         return product
+
+    def get_parents_gradient_assisted(self, parent, self_gradient):
+        n_occurences_in_inputs = len([x for x in self.inputs if x is parent])
+        assert n_occurences_in_inputs == 1, "Not implemented for other cases"
+        product_nodes = [x for x in self.inputs if x is not parent]
+        product_nodes.append(self_gradient)
+        return ElementwiseMultiply(product_nodes)
