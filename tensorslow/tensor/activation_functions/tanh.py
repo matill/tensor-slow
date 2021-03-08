@@ -1,7 +1,7 @@
 import numpy as np
 from tensorslow.tensor.core import AssistedBackPropOperation
 from tensorslow.tensor.standard_math_operations import ElementwiseMultiply, Subtract
-from tensorflow.tensor.root_nodes.constant import Constant
+from tensorslow.tensor.root_nodes.constant import Constant
 
 
 class Tanh(AssistedBackPropOperation):
