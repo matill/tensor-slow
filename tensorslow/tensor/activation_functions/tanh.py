@@ -1,8 +1,10 @@
 import numpy as np
-from tensorslow.tensor.core import Operation
+from tensorslow.tensor.core import AssistedBackPropOperation
+from tensorslow.tensor.standard_math_operations import ElementwiseMultiply, Subtract
+from tensorflow.tensor.root_nodes.constant import Constant
 
 
-class Tanh(Operation):
+class Tanh(AssistedBackPropOperation):
 
     def __init__(self, in_node):
         self.in_node = in_node
@@ -16,3 +18,10 @@ class Tanh(Operation):
         np.divide(2, y, out=y)
         np.subtract(y, 1, out=y)
         return y
+
+    def get_parents_gradient_assisted(self, parent, self_gradient):
+        return Subtract(
+            Constant(np.array(1)),
+            ElementwiseMultiply([self, self])
+        )
+
