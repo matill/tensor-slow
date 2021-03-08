@@ -14,9 +14,6 @@ class SquaredError(CostFunction):
     def compute(self, context):
         a = self.in_a.evaluate(context)
         b = self.in_b.evaluate(context)
-        print("a", a)
-        print("b", b)
-        print("a - b", a -b)
         norm = np.linalg.norm(a - b)
         return norm * norm * 0.5
 
@@ -31,3 +28,4 @@ class SquaredError(CostFunction):
             raise NotImplementedError
 
         return jacobian
+
