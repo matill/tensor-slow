@@ -8,7 +8,16 @@ that are required to extend compute graphs with nodes to compute gradients, name
 
 
 class Tensor:
-    """Abstract base class for nodes in a graph that can be evaluated to return a numpy array."""
+    """
+    Abstract base class for nodes in a graph that can be evaluated to return a numpy array.
+    Most methods defined for this class are not meant to be used directly by the users.
+    The methods that are most relevant for users to know are:
+        - get_gradient()
+        - print_json()
+        - evaluate()
+        - tag()
+    """
+
 
     def __init__(self, shape):
         self.direct_dependent_nodes = []
@@ -36,9 +45,17 @@ class Tensor:
         return self.direct_dependent_nodes
 
     def evaluate(self, context):
+        """
+        Must be implemented by subclasses. Should return a numpy array that this
+        Tensor corresponds to, and cache the result in the context dictionary.
+        """
         raise NotImplementedError
 
     def get_gradient(self, j):
+        """
+        Returns an Operation that computes the derivative of j with respect to self.
+        """
+
         # Make sure there exists a node that evaluates to the gradient
         if j not in self.derivative_operations:
 
@@ -104,12 +121,24 @@ class Tensor:
 
 
 class Operation(Tensor):
-    """Abstract base class for operations in a graph that are evaluated using other input Tensors"""
+    """
+    Abstract base class for operations in a graph that are evaluated using other
+    Tensor objects as input
+    """
 
     def __init__(self, inputs, shape, find_loop_tag=True):
+        """
+        Should be called by all subclasses.
+        """
+
         super().__init__(shape)
+
+        # Store the set of inputs
         self.inputs = inputs
 
+        # Tag this node to be part of a specific loop.
+        # Used to make sure operations from different loops
+        # cannot depend on each other, since that wouldn't logically make sense
         if find_loop_tag:
             self.find_loop_tag_from_inputs()
 
@@ -141,7 +170,7 @@ class Operation(Tensor):
         return self.direct_dependent_nodes + self.inputs
 
     def get_dependencies(self):
-        """Returns all nodes this specific operaiton depends on"""
+        """Returns all nodes this operation depends on"""
 
         dependencies = set(self.inputs)
         for node in self.inputs:
@@ -151,6 +180,13 @@ class Operation(Tensor):
 
 
     def get_and_assert_common_shape_in_list(self, nodes):
+        """
+        Used by some subclasses of Operation (mostly element-wise operations with
+        multiple inputs). 
+        Asserts all nodes in the list have the same shape.
+        Ignores nodes with the None/wildcard shape
+        Returns the shape
+        """
         common_shape = None
         for node in nodes:
             if common_shape == None:
@@ -166,6 +202,10 @@ class Operation(Tensor):
         return as_dict
 
     def evaluate(self, context):
+        """
+        Calls the Operation.compute() mathod of the class, and caches the result.
+        """
+
         if self in context:
             return context[self]
         else:
@@ -174,6 +214,9 @@ class Operation(Tensor):
             return evaluated
 
     def compute(self, context):
+        """
+        Must be implemented by suclasses. Should just return a numpy array.
+        """
         raise NotImplementedError
 
 
@@ -185,13 +228,11 @@ class BackPropOperation(Operation):
 
     def get_parents_gradient(self, parent, j):
         """
-        Returns a node that computes d(J) / d(self) * d(self) / d(parent).
-        If self == J, it returns a node that computes the d(self) / d(parent).
+        Must be implemented by subclasses
+        Returns a node that computes the derivative of a cost function "j" with
+        respect to a node "parent".
+        "parent" MUST be in the self.inputs set.
         """
-        raise NotImplementedError
-
-    def get_jacobian_operation(self, parent):
-        """Returns a node that computes d(self) / d(parent)"""
         raise NotImplementedError
 
 
@@ -210,7 +251,22 @@ class AssistedBackPropOperation(BackPropOperation):
             self_gradient = self.get_gradient(j)
             return self.get_parents_gradient_assisted(parent, self_gradient)
 
+    def get_jacobian_operation(self, parent):
+        """
+        This function is only called on objects that are the cost function of a graph.
+        If implemented, it should return the derivative of itself with respect to
+        one of it's input nodes.
+        """
+        raise NotImplementedError
+
     def get_parents_gradient_assisted(self, parent, self_gradient):
+        """
+        "self_gradient" is the derivative of some (unimportant) cost function with
+        respect to this node.
+        "parent" is one of the inputs to "self".
+        This method should return the derivative of the said cost function with
+        respect to "parent".
+        """
         raise NotImplementedError
 
 
@@ -236,7 +292,10 @@ class AddN(BackPropOperation):
 
 
 class StaticMultiply(Operation):
-    """Scales the input node by a constant value"""
+    """
+    Scales the input node by a constant value
+    Constant is of type float or int, not ts.Constant
+    """
 
     def __init__(self, in_node, constant):
         super().__init__([in_node], in_node.shape)
