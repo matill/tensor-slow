@@ -1,0 +1,22 @@
+# TensorSlow: A framework for small scale machine learning
+
+## High level description
+A deep learning library that provides a graph-execution programming-model, similar to TensorFlow. Perhaps the most striking difference between TensorFlow and TensorSlow is how incredibly slow TensorSlow is. Being implemented in python using numpy, it is basically impossible to optimize TensorSlow to achieve acceptable performance. A lucky side effect is that if you are a TensorSlow user, you get more (justified) time for coffe breaks. This is probably the only reason you would want to use TensorSlow for real projects.
+
+## Programming model / Workflow
+Defining and training neural networks with TensorSlow has a simple workflow, which is shown in cnn_example.py. Basically, the workflow is as follows:
+
+* You first define a graph of operations. This graph needs some ts.Input operations to represent inputs to the computation, for instance an input image that is meant to be classified. When training your model, you may also need ts.Input nodes for your ground-truth labels, to define the loss function.
+* After the ts.Input nodes have been defined you can create a graph using basically any combination of operations supplied by TensorSlow. Operations need some input nodes. Inputs to operations can be any subclass of ts.Tensor (including ts.Input, ts.Variable, ts.Constant, and ts.Operation). This graph CAN, but doesn't need to be sequential. In other words skip connections are supported.
+* To be able to train your model you need a cost function to be minimized. The cost function is also represented as an Operation-node in the graph. The cost function doesn't necesarily need to be a subclass of ts.CostFunction, as long as it returns a scalar.
+* The model / graph will also need some trainable parameters / weights. For trainable parameters, you should use ts.Variable nodes. ts.Constant is very similar to ts.Variable, but the automatic optimization utilities treat them differently; ts.Constant are constant, and should not change, while ts.Variable-nodes are automatically identified, differentiated, and updated by the optimization utilities.
+* With a graph of operations that is terminated with a cost function, you can optimize the cost function using the utilities in ts.ComputeGraph. For instance, you can use ComputeGraph.momentum_sgd_epoch(). This function uses the momentum algorithm to tweak the ts.Variable nodes to minimize the cost-function-operation (which is an argument to the function). This function also requires a training set, which is a list of dictionaries, where the dictionaries map ts.Input nodes to a numpy array, such that all operations in the graph (including the gradients) can be evaluated.
+
+## Automatic differentiation; Computing gradients
+TensorSlow supports automatic differentiation of cost functions. Given a graph that is terminated with a cost function, you can find the derivative of the cost function with respect to basically any node in the compute graph. When computing derivatives, the graph of operations is extended with new operations that compute derivatives. This is one of the main features of TensorSlow, and is crucial to support parameter optimization / training.
+
+TensorSlow can extend a compute graph with a subgraph that computes the gradient of a target cost function, and the gradient will of course need be with resect to some node (called node X) that the cost function depends on. However, beyond the fact that the gradient is mathematically defined, there is a requirement that needs to be satisfied; All paths from node X to the cost function need to entirely consist of ts.BackPropOperation subclasses. BackPropOperations provide an additional method to return a node which computes the gradient of a cost function, with respect to one of the nodes that are input to the BackPropOperation. With a chain of BackPropOperations, TensorSlow is able to recursively extend the compute graph with gradients.
+
+## Cyclic graphs / Recurrent Neural Networks
+Support for recurrent neural networks is currently under development. This is done using Loop operations with recurrence relations, and optionally queue operations. Computing the output of a loop is currently supported, but automatic differentiation of cost functions that depend on loops is currently blocked by some major implementational complications. It currently looks like adding support for this requires redesigning the core of TensorSlow.
+
