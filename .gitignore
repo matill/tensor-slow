@@ -1,5 +1,6 @@
 *__pycache__*
 data/
+!data/get_mnist.sh
 figures/
 apps/
 .vscode
