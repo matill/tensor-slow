@@ -1,10 +1,15 @@
+"""
+This file is meant for notes on what features to implement, and manual testing
+of new features.
+"""
+
 import numpy as np
 import json
 import tensorslow as ts
 
 
 # TODO:
-# Core stuff
+# Core stuff:
 # When finding the gradient of a node, the shape of the gradient and the original node should have equal shape. Add assertions for this.
 # Create a common way to check if the same node already exists when creating it, and return the existing one????
 # Make context an optional argument to Tensor.evaluate
@@ -18,7 +23,7 @@ import tensorslow as ts
 # Instead? Make other.get_parents_gradient(self, j) return None if j does not depend on j?
 # |--> This can open for new possibilities with constant(0) being equivalent with None.
 
-# Other stuff
+# Other stuff:
 # LSTM builder utility
 # Write test cases for extending with gradients and evaluation
 # Make Sum operations properly differentiable
