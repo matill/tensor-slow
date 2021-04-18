@@ -4,3 +4,4 @@ from .elementwise_multiply import ElementwiseMultiply
 from .scalar_tensor_multiply import ScalarTensorMultiply
 from .mat_mul import MatMul
 from .transpose import Transpose
+from .sum import Sum
