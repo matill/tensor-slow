@@ -5,3 +5,4 @@ from .standard_math_operations import *
 from .root_nodes import *
 from .dynamic_control_flow import *
 from .stateful_operations import *
+from .reshape import *
