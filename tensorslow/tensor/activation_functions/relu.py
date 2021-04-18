@@ -17,7 +17,7 @@ class Relu(AssistedBackPropOperation):
         return np.fmax(x, 0.)
 
     def get_parents_gradient_assisted(self, parent, self_gradient):
-        self_over_parent_gradient = ReluDerivative(self.in_node, self.leaky_scale)
+        self_over_parent_gradient = ReluDerivative(self.in_node)
         return ElementwiseMultiply([self_over_parent_gradient, self_gradient])
 
 

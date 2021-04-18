@@ -40,7 +40,7 @@ class SoftMaxCrossEntropy(CostFunction):
         # Compute
         dot = np.dot(x, y)
         y_sum = np.sum(y)
-        x_max = np.max(softmax_input)
+        x_max = np.max(x)
         x_normalized = x - x_max
         e_to_x_normalized = np.exp(x_normalized, out=x_normalized)
         sum_e = np.sum(e_to_x_normalized)

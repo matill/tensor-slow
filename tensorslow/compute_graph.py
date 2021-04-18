@@ -1,4 +1,6 @@
 from .tensor import Variable
+import numpy as np
+import random
 
 
 class ComputeGraph:
@@ -93,7 +95,6 @@ class ComputeGraph:
             # Find all trainable parameters (variables), get their gradient
             # node and initialize their momentum to zero
             cost_node_dependencies = cost_node.get_dependencies()
-            print("cost_node_dependencies", cost_node_dependencies)
             parameters = [
                 x for x in cost_node_dependencies if type(x) is Variable
             ]

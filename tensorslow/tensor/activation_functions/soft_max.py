@@ -22,6 +22,5 @@ class SoftMax(Operation):
         exponented = np.exp(normalized, out=normalized)
         exp_sum = np.sum(exponented)
         exponented /= exp_sum
-        print("in_val", in_val, "exponented", exponented)
         return exponented
 

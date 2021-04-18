@@ -76,9 +76,9 @@ class Tensor:
 
     def __str__(self):
         if self.name_tag is None:
-            return f"{type(self)}"
+            return f"{type(self)} with shape {self.shape}"
         else:
-            return f"{type(self)}: ({self.name_tag})"
+            return f"{type(self)} with shape {self.shape}: ({self.name_tag})"
 
     def to_dict(self, context):
         as_dict = {
@@ -140,6 +140,16 @@ class Operation(Tensor):
         """Returns all nodes that depend on this node, and the ones this node depends on"""
         return self.direct_dependent_nodes + self.inputs
 
+    def get_dependencies(self):
+        """Returns all nodes this specific operaiton depends on"""
+
+        dependencies = set(self.inputs)
+        for node in self.inputs:
+            if isinstance(node, Operation):
+                dependencies |= node.get_dependencies()
+        return dependencies
+
+
     def get_and_assert_common_shape_in_list(self, nodes):
         common_shape = None
         for node in nodes:
@@ -198,7 +208,7 @@ class AssistedBackPropOperation(BackPropOperation):
             return self.get_jacobian_operation(parent)
         else:
             self_gradient = self.get_gradient(j)
-            return self.get_parents_gradient_assisted(parent, j, self_gradient)
+            return self.get_parents_gradient_assisted(parent, self_gradient)
 
     def get_parents_gradient_assisted(self, parent, self_gradient):
         raise NotImplementedError

@@ -4,7 +4,7 @@
 A deep learning library that provides a graph-execution programming-model, similar to TensorFlow. Perhaps the most striking difference between TensorFlow and TensorSlow is how incredibly slow TensorSlow is. Being implemented in python using numpy, it is basically impossible to optimize TensorSlow to achieve acceptable performance. A lucky side effect is that if you are a TensorSlow user, you get more (justified) time for coffe breaks. This is probably the only reason you would want to use TensorSlow for real projects.
 
 ## Programming model / Workflow
-Defining and training neural networks with TensorSlow has a simple workflow, which is shown in cnn_example.py. Basically, the workflow is as follows:
+Defining and training neural networks with TensorSlow has a simple workflow, which is shown in classifier_example.py. Basically, the workflow is as follows:
 
 * You first define a graph of operations. This graph needs some ts.Input operations to represent inputs to the computation, for instance an input image that is meant to be classified. When training your model, you may also need ts.Input nodes for your ground-truth labels, to define the loss function.
 * After the ts.Input nodes have been defined you can create a graph using basically any combination of operations supplied by TensorSlow. Operations need some input nodes. Inputs to operations can be any subclass of ts.Tensor (including ts.Input, ts.Variable, ts.Constant, and ts.Operation). This graph CAN, but doesn't need to be sequential. In other words skip connections are supported.
